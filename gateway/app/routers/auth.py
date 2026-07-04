@@ -1,0 +1,149 @@
+
+"""
+Authentication router handling user registration, logins, JWT refresh rotation, and logout sessions.
+"""
+
+import datetime
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+import jwt
+
+from app.config import settings
+from app.dependencies import get_db, get_current_user
+from app.models import User
+from app.schemas import UserCreate, UserResponse, Token
+from app.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_token,
+)
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(user_in: UserCreate, db: Session = Depends(get_db)):
+    """Registers a new user by checking for duplicate emails and hashing the password."""
+    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email already exists."
+        )
+    
+    hashed_pwd = get_password_hash(user_in.password)
+    new_user = User(email=user_in.email, password_hash=hashed_pwd)
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+
+@router.post("/login", response_model=Token)
+def login(
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Validates user credentials (mapping username to email in form data).
+    Returns an access token in the JSON body and sets the refresh token in an HTTP-only cookie.
+    """
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user."
+        )
+
+    # generate token payloads
+    user_id_str = str(user.id)
+    access_token = create_access_token(data={"sub": user_id_str})
+    refresh_token = create_refresh_token(data={"sub": user_id_str})
+
+    # set refresh token cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,  # HTTPS transfer in production
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/api/v1/auth",  # scope cookie to auth endpoints
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_session(request: Request, response: Response, db: Session = Depends(get_db)):
+    """
+    Validates the refresh token cookie, rotates it,
+    and returns a new Access Token.
+    """
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or invalid refresh cookie."
+        )
+
+    try:
+        payload = decode_token(refresh_token)
+        user_id_str: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if user_id_str is None or token_type != "refresh":
+            raise jwt.PyJWTError()
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token."
+        )
+
+    user = db.query(User).filter(User.id == user_id_str).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User associated with this token is inactive or does not exist."
+        )
+
+    # Rotate both access and refresh tokens
+    new_access_token = create_access_token(data={"sub": user_id_str})
+    new_refresh_token = create_refresh_token(data={"sub": user_id_str})
+
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/api/v1/auth",
+    )
+
+    return {"access_token": new_access_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Deletes the refresh token cookie, terminating the session."""
+    response.delete_cookie(key="refresh_token", path="/api/v1/auth")
+    return {"detail": "Successfully logged out"}
+
+
+@router.get("/me", response_model=UserResponse)
+def get_user_profile(current_user: User = Depends(get_current_user)):
+    """Returns the current authenticated user's profile info."""
+    return current_user

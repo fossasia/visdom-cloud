@@ -1,0 +1,25 @@
+# 1. Environment Secrets 
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 2. Python / FastAPI
+gateway/.venv/
+gateway/__pycache__/
+gateway/**/*.pyc
+gateway/**/*.pyo
+gateway/**/*.pyd
+gateway/.pytest_cache/
+gateway/visdom_cloud.db
+
+# 3. React / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.eslintcache
+
+# 4. OS Files
+.DS_Store
+Thumbs.db
