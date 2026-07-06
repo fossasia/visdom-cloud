@@ -3,8 +3,10 @@
 API Key router to issue, list, and revoke programmatic authentication tokens for remote scripts.
 """
 
+from os import name
 import hashlib
 import secrets
+import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -46,10 +48,16 @@ def create_api_key(
     db.refresh(db_key)
 
     # Attach the raw key to response schema
-    response_data = APIKeyCreatedResponse.model_validate(db_key)
-    response_data.raw_key = raw_key
     
-    return response_data
+    return APIKeyCreatedResponse(
+        id=db_key.id,
+        name=db_key.name,
+        prefix=db_key.prefix,
+        is_active=db_key.is_active,
+        created_at=db_key.created_at,
+        last_used_at=db_key.last_used_at,
+        raw_key=raw_key
+    )
 
 
 @router.get("", response_model=List[APIKeyResponse])
@@ -63,7 +71,7 @@ def list_api_keys(
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_api_key(
-    key_id: str,
+    key_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

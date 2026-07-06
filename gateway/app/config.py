@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Default connection string for local PostgreSQL
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/visdom_cloud"
+    DATABASE_URL: str = "postgresql://postgres:root@localhost:5432/visdom_cloud"
     JWT_SECRET: str = "dev-only-insecure-secret-change-me-0123456789"  # Change in production!
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
