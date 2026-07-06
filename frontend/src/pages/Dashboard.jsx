@@ -41,7 +41,19 @@ const Dashboard = () => {
       setKeyName('');
       fetchKeys();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create API key.');
+      const detail = err.response?.data?.detail;
+      let errorMsg = 'Failed to create API key.';
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errorMsg = detail.map(d => {
+          if (d.msg === 'String should have at least 6 characters') {
+            return 'Password should have atleast 6 characters';
+          }
+          return d.msg;
+        }).join(', ');
+      }
+      setError(errorMsg);
     } finally {
       setSubmitting(false);
     }

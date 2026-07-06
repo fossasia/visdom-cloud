@@ -21,7 +21,19 @@ const Login = () => {
       await login(email, password);
       navigate('/', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+      const detail = err.response?.data?.detail;
+      let errorMsg = 'Login failed. Please check your credentials.';
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errorMsg = detail.map(d => {
+          if (d.msg === 'String should have at least 6 characters') {
+            return 'Password should have atleast 6 characters';
+          }
+          return d.msg;
+        }).join(', ');
+      }
+      setError(errorMsg);
     } finally {
       setSubmitting(false);
     }

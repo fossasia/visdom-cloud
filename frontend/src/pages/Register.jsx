@@ -32,7 +32,19 @@ const Register = () => {
         navigate('/login');
       }, 2000);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      const detail = err.response?.data?.detail;
+      let errorMsg = 'Registration failed. Please try again.';
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errorMsg = detail.map(d => {
+          if (d.msg === 'String should have at least 6 characters') {
+            return 'Password should have atleast 6 characters';
+          }
+          return d.msg;
+        }).join(', ');
+      }
+      setError(errorMsg);
       setSubmitting(false);
     }
   };
