@@ -9,7 +9,6 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const [keys, setKeys] = useState([]);
   const [keyName, setKeyName] = useState('');
-  const [healthStatus, setHealthStatus] = useState('checking');
   const [newRawKey, setNewRawKey] = useState(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -24,24 +23,8 @@ const Dashboard = () => {
     }
   };
 
-  const checkHealth = async () => {
-    try {
-      const response = await api.get('/health');
-      if (response.data.status === 'healthy') {
-        setHealthStatus('connected');
-      } else {
-        setHealthStatus('disconnected');
-      }
-    } catch (err) {
-      setHealthStatus('disconnected');
-    }
-  };
-
   useEffect(() => {
     fetchKeys();
-    checkHealth();
-    const interval = setInterval(checkHealth, 15000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleCreateKey = async (e) => {
@@ -99,15 +82,6 @@ const Dashboard = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          {/* Status Indicator matching the "offline" style in Visdom */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {healthStatus === 'connected' ? (
-              <span className="visdom-badge badge-online">online</span>
-            ) : (
-              <span className="visdom-badge badge-offline">offline</span>
-            )}
-          </div>
-
           <button onClick={logout} className="visdom-btn" style={{ height: '24px', padding: '0 8px' }}>
             <LogOut size={12} />
             Logout
