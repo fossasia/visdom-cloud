@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth, api } from '../context/AuthContext';
 import {
   Key, Plus, Trash2, LogOut, Check, Copy, User as UserIcon, Terminal, X
@@ -14,18 +14,18 @@ const Dashboard = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchKeys = async () => {
+  const fetchKeys = useCallback(async () => {
     try {
       const response = await api.get('/keys');
       setKeys(response.data);
     } catch (err) {
       console.error('Error fetching API keys', err);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchKeys();
-  }, []);
+  }, [fetchKeys]);
 
   const handleCreateKey = async (e) => {
     e.preventDefault();

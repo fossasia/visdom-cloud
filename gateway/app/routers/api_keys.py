@@ -3,7 +3,6 @@
 API Key router to issue, list, and revoke programmatic authentication tokens for remote scripts.
 """
 
-from os import name
 import hashlib
 import secrets
 import uuid

@@ -14,18 +14,18 @@ export const ProtectedRoute = ({ children }) => {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
-        background: 'var(--bg-gradient)',
-        color: 'var(--text-secondary)'
+        background: '#f0f2f5',
+        color: 'var(--text-primary)'
       }}>
         <div style={{
           width: '40px',
           height: '40px',
           border: '4px solid var(--panel-border)',
-          borderTopColor: 'var(--accent-purple)',
+          borderTopColor: 'var(--visdom-bg)',
           borderRadius: '50%',
           animation: 'spin 1s linear infinite'
         }} />
-        <p style={{ marginTop: '16px', fontSize: '14px', letterSpacing: '0.5px' }}>Checking Session...</p>
+        <p style={{ marginTop: '16px', fontSize: '14px', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Checking Session...</p>
         <style>{`
           @keyframes spin {
             0% { transform: rotate(0deg); }
