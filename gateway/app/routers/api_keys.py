@@ -10,6 +10,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.dependencies import get_db, get_current_user
 from app.models import APIKey, User
 from app.schemas import APIKeyCreate, APIKeyResponse, APIKeyCreatedResponse
@@ -26,9 +27,9 @@ def create_api_key(
     Generates a secure API key, stores its prefix & SHA-256 hash in DB,
     and returns the raw key to the user (only displayed once).
     """
-    # Generate key: "vis_live_" + 32 random characters
+    # Generate key: prefix + 32 random characters
     raw_secret = secrets.token_hex(16)
-    prefix = "vis_live"
+    prefix = settings.API_KEY_PREFIX
     raw_key = f"{prefix}_{raw_secret}"
 
     # Hash the key using SHA-256
