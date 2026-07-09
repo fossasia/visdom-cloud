@@ -1,0 +1,81 @@
+/* Copyright 2017-present, The Visdom Authors */
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import { api } from '../../context/AuthContext';
+
+const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('member');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setSubmitting(true);
+    setError('');
+    try {
+      const response = await api.post(`/workspaces/${workspaceId}/members`, {
+        email: email.trim(),
+        role,
+      });
+      onInvited(response.data);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to invite member.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="gc-modal-overlay" onClick={onClose}>
+      <div className="gc-panel gc-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="gc-modal-header">
+          <span className="gc-modal-title">Invite Collaborator</span>
+          <button className="gc-modal-close" onClick={onClose} type="button">
+            <X size={16} />
+          </button>
+        </div>
+
+        {error && <div className="gc-form-error">{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="gc-field">
+            <label className="gc-label">Email Address</label>
+            <input
+              type="email"
+              required
+              autoFocus
+              className="gc-input"
+              placeholder="teammate@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="gc-field">
+            <label className="gc-label">Role</label>
+            <select className="gc-select" value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="gc-btn gc-btn-primary"
+            style={{ width: '100%', marginTop: '4px' }}
+          >
+            {submitting ? 'Sending Invite...' : 'Send Invite'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default InviteMemberModal;

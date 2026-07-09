@@ -4,10 +4,9 @@ import axios from 'axios';
 
 const AuthContext = createContext(null);
 
-// Create axios instance with pre-configured API base
 export const api = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true, // Send HTTP cookies (refresh_token)
+  withCredentials: true,
 });
 
 export const AuthProvider = ({ children }) => {
@@ -15,7 +14,6 @@ export const AuthProvider = ({ children }) => {
   const [accessToken, setAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Configure request interceptor to append authorization header
   useEffect(() => {
     const requestInterceptor = api.interceptors.request.use(
       (config) => {
@@ -32,28 +30,23 @@ export const AuthProvider = ({ children }) => {
     };
   }, [accessToken]);
 
-  // Configure response interceptor to handle token refresh automatically
   useEffect(() => {
     const responseInterceptor = api.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
         
-        // If unauthorized and has not retried yet
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
           try {
-            // Request a new access token using the HTTP-only refresh cookie
             const refreshResponse = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
             const newAccessToken = refreshResponse.data.access_token;
             
             setAccessToken(newAccessToken);
             
-            // Retry the original request with the new authorization header
             originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
             return api(originalRequest);
           } catch (refreshError) {
-            // If refresh fails, log the user out
             setAccessToken(null);
             setUser(null);
             return Promise.reject(refreshError);
@@ -68,22 +61,18 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Try to load user session on app mount
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Attempt to call refresh to see if user has a valid refresh cookie
         const refreshResponse = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
         const initialToken = refreshResponse.data.access_token;
         setAccessToken(initialToken);
         
-        // Fetch user profiles
         const userResponse = await axios.get('/api/v1/auth/me', {
           headers: { Authorization: `Bearer ${initialToken}` }
         });
         setUser(userResponse.data);
       } catch (e) {
-        // No active session
         setUser(null);
         setAccessToken(null);
       } finally {
@@ -95,7 +84,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    // OAuth2PasswordRequestForm expects username (email) and password as form data
     const params = new URLSearchParams();
     params.append('username', email);
     params.append('password', password);
@@ -108,7 +96,6 @@ export const AuthProvider = ({ children }) => {
     const token = loginResponse.data.access_token;
     setAccessToken(token);
 
-    // Fetch user details
     const userResponse = await axios.get('/api/v1/auth/me', {
       headers: { Authorization: `Bearer ${token}` }
     });

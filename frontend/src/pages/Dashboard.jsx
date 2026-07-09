@@ -1,309 +1,176 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth, api } from '../context/AuthContext';
-import {
-  Key, Plus, Trash2, LogOut, Check, Copy, User as UserIcon, Terminal, X
-} from 'lucide-react';
+import { Building2, CreditCard, Key, Link2, LogOut, Users } from 'lucide-react';
+import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
+import WorkspaceSettingsTab from '../components/workspace/WorkspaceSettingsTab';
+import MembersTab from '../components/workspace/MembersTab';
+import SharedLinksTab from '../components/workspace/SharedLinksTab';
+import KeysTab from '../components/workspace/KeysTab';
+import BillingTab from '../components/workspace/BillingTab';
+
+const TABS = [
+  { id: 'workspaces', label: 'Workspaces', icon: Building2 },
+  { id: 'members', label: 'Members', icon: Users },
+  { id: 'keys', label: 'Keys & API', icon: Key },
+  { id: 'shared', label: 'Shared Links', icon: Link2 },
+  { id: 'billing', label: 'Billing', icon: CreditCard },
+];
+
+const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const [keys, setKeys] = useState([]);
-  const [keyName, setKeyName] = useState('');
-  const [newRawKey, setNewRawKey] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [workspaces, setWorkspaces] = useState([]);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [workspacesLoading, setWorkspacesLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [activeTab, setActiveTab] = useState('workspaces');
 
-  const fetchKeys = useCallback(async () => {
+  const fetchWorkspaces = useCallback(async () => {
+    setWorkspacesLoading(true);
     try {
-      const response = await api.get('/keys');
-      setKeys(response.data);
+      const response = await api.get('/workspaces');
+      setWorkspaces(response.data);
+      setActiveWorkspace((prev) => {
+        if (prev && response.data.some((ws) => ws.id === prev.id)) return prev;
+        return response.data[0] || null;
+      });
     } catch (err) {
-      console.error('Error fetching API keys', err);
+      console.error('Error fetching workspaces', err);
+    } finally {
+      setWorkspacesLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchKeys();
-  }, [fetchKeys]);
+    fetchWorkspaces();
+  }, [fetchWorkspaces]);
 
-  const handleCreateKey = async (e) => {
-    e.preventDefault();
-    if (!keyName.trim()) return;
-
-    setSubmitting(true);
-    setError('');
-    setNewRawKey(null);
-
-    try {
-      const response = await api.post('/keys', { name: keyName });
-      setNewRawKey(response.data.raw_key);
-      setKeyName('');
-      fetchKeys();
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      let errorMsg = 'Failed to create API key.';
-      if (typeof detail === 'string') {
-        errorMsg = detail;
-      } else if (Array.isArray(detail)) {
-        errorMsg = detail.map(d => {
-          if (d.msg === 'String should have at least 6 characters') {
-            return 'Password should have atleast 6 characters';
-          }
-          return d.msg;
-        }).join(', ');
-      }
-      setError(errorMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleRevokeKey = async (id) => {
-    if (!window.confirm('Are you sure you want to revoke this API key? This action is permanent.')) {
+  // Determine whether the current user is an admin of the active workspace,
+  // to gate admin-only actions across tabs.
+  useEffect(() => {
+    if (!activeWorkspace || !user) {
+      setIsAdmin(false);
       return;
     }
 
-    try {
-      await api.delete(`/keys/${id}`);
-      fetchKeys();
-    } catch (err) {
-      alert('Failed to revoke API key');
-    }
+    let cancelled = false;
+    api
+      .get(`/workspaces/${activeWorkspace.id}/members`)
+      .then((response) => {
+        if (cancelled) return;
+        const self = response.data.find((m) => m.user_id === user.id);
+        setIsAdmin(self?.role === 'admin');
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace, user]);
+
+  const handleWorkspaceCreated = (workspace) => {
+    setWorkspaces((prev) => [...prev, workspace]);
+    setActiveWorkspace(workspace);
+    setActiveTab('workspaces');
   };
 
-  const handleCopyKey = () => {
-    if (!newRawKey) return;
-    navigator.clipboard.writeText(newRawKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  // Shared by "delete workspace" (admin) and "leave workspace" (any member) —
+  // both mean this workspace should disappear from my own list right away.
+  const handleWorkspaceRemoved = (workspaceId) => {
+    setWorkspaces((prev) => {
+      const remaining = prev.filter((ws) => ws.id !== workspaceId);
+      setActiveWorkspace(remaining[0] || null);
+      return remaining;
+    });
+    setActiveTab('workspaces');
   };
+
+  const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="gc-shell">
+      <aside className="gc-sidebar">
+        <a href="/" className="gc-logo">
+          visdom<span>cloud</span>
+        </a>
 
-      {/* 1. Visdom-themed Top Navbar */}
-      <nav className="visdom-navbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <a href="/" className="visdom-logo">
-            visdom<span>cloud</span>
-          </a>
-          <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Console Dashboard
-          </div>
-        </div>
+        {!workspacesLoading && (
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            onSwitch={setActiveWorkspace}
+            onCreated={handleWorkspaceCreated}
+          />
+        )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <button onClick={logout} className="visdom-btn" style={{ height: '24px', padding: '0 8px' }}>
-            <LogOut size={12} />
+        <nav className="gc-sidebar-nav">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                className={`gc-tab ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+                type="button"
+              >
+                <Icon size={15} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="gc-sidebar-footer">
+          <div className="gc-sidebar-user">{user?.email}</div>
+          <button onClick={logout} className="gc-btn" type="button">
+            <LogOut size={13} />
             Logout
           </button>
         </div>
-      </nav>
+      </aside>
 
-      {/* 2. Floating Panes Workspace (Visdom Blue Background) */}
-      <div style={{
-        flex: 1,
-        padding: '24px',
-        display: 'grid',
-        gridTemplateColumns: '280px 1fr',
-        gap: '20px',
-        alignItems: 'start',
-      }}>
-
-        {/* User profile pane */}
-        <aside className="visdom-panel" style={{ height: 'auto' }}>
-          <div className="visdom-panel-header">
-            <span>User Account</span>
-            <UserIcon size={14} style={{ color: 'var(--text-muted)' }} />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
-            <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Email Address</div>
-              <div style={{ fontWeight: '600', wordBreak: 'break-all' }}>{user?.email}</div>
+      <main className="gc-main">
+        {needsWorkspace ? (
+          <section className="gc-panel">
+            <div className="gc-empty">
+              You don't have a workspace yet. Use "Add Workspace" in the sidebar to create your first one.
             </div>
-
-            <div>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '6px' }}>Active Plan</div>
-              <span className="badge badge-success" style={{
-                background: '#e2f0d9',
-                color: '#385723',
-                border: '1px solid #c5e0b4',
-                padding: '2px 8px',
-                borderRadius: '2px',
-                fontSize: '11px',
-                fontWeight: '600',
-                textTransform: 'uppercase'
-              }}>{user?.tier} plan</span>
-            </div>
-          </div>
-        </aside>
-
-        {/* API keys management pane */}
-        <main style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
-          {/* API Key Console */}
-          <section className="visdom-panel">
-            <div className="visdom-panel-header">
-              <span>Developer API Keys</span>
-              <Key size={14} style={{ color: 'var(--text-muted)' }} />
-            </div>
-
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px 0', lineHeight: '1.4' }}>
-              API keys allow automated remote pipelines (e.g., PyTorch training scripts) to connect and publish visualization logs securely to your workspaces.
-            </p>
-
-            <form onSubmit={handleCreateKey} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-              <input
-                type="text"
-                required
-                className="visdom-input"
-                placeholder="Key name (e.g., GPU-Node-01)"
-                value={keyName}
-                onChange={(e) => setKeyName(e.target.value)}
-                style={{ flex: 1 }}
+          </section>
+        ) : (
+          <>
+            {activeTab === 'workspaces' && activeWorkspace && (
+              <WorkspaceSettingsTab
+                workspace={activeWorkspace}
+                isAdmin={isAdmin}
+                currentUserId={user?.id}
+                onDeleted={handleWorkspaceRemoved}
+                onLeave={handleWorkspaceRemoved}
               />
-              <button type="submit" disabled={submitting} className="visdom-btn" style={{
-                backgroundColor: '#3b5998',
-                color: '#ffffff',
-                borderColor: '#2f477a',
-                whiteSpace: 'nowrap'
-              }}>
-                <Plus size={14} />
-                Generate
-              </button>
-            </form>
-
-            {error && (
-              <div style={{
-                background: 'rgba(217, 83, 79, 0.1)',
-                border: '1px solid var(--danger-bg)',
-                color: 'var(--danger-bg)',
-                padding: '8px 12px',
-                fontSize: '13px',
-                borderRadius: '2px',
-                marginBottom: '16px'
-              }}>
-                {error}
-              </div>
             )}
 
-            {/* Secure Copy Key Dialog */}
-            {newRawKey && (
-              <div className="visdom-panel" style={{
-                background: '#fafafa',
-                borderColor: '#66afe9',
-                padding: '16px',
-                marginBottom: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                position: 'relative'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#337ab7' }}>
-                    Secret API Key Generated
-                  </span>
-                  <button
-                    onClick={() => setNewRawKey(null)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '2px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#333'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Please copy this key now. It will not be shown to you again for security reasons.
-                </div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: '#ffffff',
-                  padding: '8px 12px',
-                  borderRadius: '2px',
-                  border: '1px solid var(--navbar-border)',
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  color: 'var(--text-primary)',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  wordBreak: 'break-all'
-                }}>
-                  <span>{newRawKey}</span>
-                  <button onClick={handleCopyKey} style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: copied ? 'var(--success-bg)' : '#3b5998',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '2px'
-                  }}>
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
+            {activeTab === 'members' && activeWorkspace && (
+              <MembersTab
+                workspaceId={activeWorkspace.id}
+                currentUserId={user?.id}
+                isAdmin={isAdmin}
+                ownerId={activeWorkspace.created_by}
+              />
             )}
 
-          </section>
-          {/* Active Keys List Pane */}
-          <section className="visdom-panel">
-            <div className="visdom-panel-header">
-              <span>Active Keys ({keys.length})</span>
-              <Terminal size={14} style={{ color: 'var(--text-muted)' }} />
-            </div>
+            {activeTab === 'keys' && <KeysTab />}
 
-            {keys.length === 0 ? (
-              <div style={{
-                border: '1px dashed var(--navbar-border)',
-                borderRadius: '2px',
-                padding: '24px',
-                textAlign: 'center',
-                color: 'var(--text-muted)',
-                fontSize: '13px'
-              }}>
-                No API keys generated yet.
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {keys.map((key) => (
-                  <div key={key.id} className="key-item">
-                    <div>
-                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{key.name}</div>
-                      <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        <span>Prefix: {key.prefix}</span>
-                        <span>•</span>
-                        <span>Created: {new Date(key.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleRevokeKey(key.id)}
-                      className="visdom-btn visdom-btn-danger"
-                      style={{ height: '24px', width: '24px', padding: 0 }}
-                      title="Revoke API Key"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            {activeTab === 'shared' && activeWorkspace && (
+              <SharedLinksTab workspaceId={activeWorkspace.id} isAdmin={isAdmin} />
             )}
-          </section>
 
-        </main>
-      </div>
-
+            {activeTab === 'billing' && <BillingTab user={user} />}
+          </>
+        )}
+      </main>
     </div>
   );
 };

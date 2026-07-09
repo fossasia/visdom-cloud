@@ -1,0 +1,77 @@
+# Copyright 2017-present, The Visdom Authors
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""
+Pydantic data schemas for workspaces, memberships, and shared links.
+Standardizes the fields for API validation using UUID and Email.
+"""
+
+import datetime
+import uuid
+from typing import Literal, Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+RoleLiteral = Literal["admin", "member", "viewer"]
+
+
+# --- WORKSPACE SCHEMAS ---
+class WorkspaceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9-]+$")
+
+
+class WorkspaceResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    created_by: Optional[uuid.UUID] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- MEMBERSHIP SCHEMAS ---
+class MemberInvite(BaseModel):
+    email: EmailStr = Field(..., max_length=100)
+    role: RoleLiteral
+
+
+class MemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: EmailStr
+    role: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemberRoleUpdate(BaseModel):
+    role: RoleLiteral
+
+
+# --- SHARED LINK SCHEMAS ---
+class SharedLinkCreate(BaseModel):
+    role: RoleLiteral = "member"
+    expires_at: Optional[datetime.datetime] = None
+    password: Optional[str] = Field(default=None, min_length=4, max_length=100)
+
+
+class SharedLinkResponse(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    role: str
+    expires_at: Optional[datetime.datetime] = None
+    has_password: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SharedLinkJoinRequest(BaseModel):
+    password: Optional[str] = None
+
+
+class SharedLinkJoinResponse(BaseModel):
+    workspace: WorkspaceResponse
+    role: str
+    already_member: bool
