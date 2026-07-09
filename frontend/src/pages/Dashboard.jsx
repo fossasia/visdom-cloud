@@ -18,6 +18,8 @@ const TABS = [
 ];
 
 const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
+const TAB_IDS = new Set(TABS.map((tab) => tab.id));
+const ACTIVE_TAB_STORAGE_KEY = 'visdom-dashboard-active-tab';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -25,7 +27,15 @@ const Dashboard = () => {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState('workspaces');
+  const [activeTab, setActiveTab] = useState(() => {
+    const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
+  });
+
+  // Keep the active tab sticky across page refreshes.
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const fetchWorkspaces = useCallback(async () => {
     setWorkspacesLoading(true);
@@ -95,7 +105,7 @@ const Dashboard = () => {
     <div className="gc-shell">
       <aside className="gc-sidebar">
         <a href="/" className="gc-logo">
-          visdom<span>cloud</span>
+          visdom
         </a>
 
         {!workspacesLoading && (

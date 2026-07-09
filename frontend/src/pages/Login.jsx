@@ -44,7 +44,7 @@ const Login = () => {
       <div className="visdom-panel auth-panel">
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <h2 className="visdom-logo" style={{ fontSize: '24px', margin: '0 0 4px 0' }}>
-            visdom<span>cloud</span>
+            visdom
           </h2>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Sign in to manage your workspaces</div>
         </div>

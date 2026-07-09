@@ -11,7 +11,7 @@ const Register = () => {
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -27,10 +27,9 @@ const Register = () => {
     setSubmitting(true);
     try {
       await register(email, password);
-      setSuccess('Account created! Redirecting...');
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+      setSuccess('Account created! Logging you in...');
+      await login(email, password);
+      navigate('/', { replace: true });
     } catch (err) {
       const detail = err.response?.data?.detail;
       let errorMsg = 'Registration failed. Please try again.';
@@ -54,7 +53,7 @@ const Register = () => {
       <div className="visdom-panel auth-panel">
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <h2 className="visdom-logo" style={{ fontSize: '24px', margin: '0 0 4px 0' }}>
-            visdom<span>cloud</span>
+            visdom
           </h2>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Create your user account</div>
         </div>
