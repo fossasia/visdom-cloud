@@ -5,10 +5,12 @@ API Key router to issue, list, and revoke programmatic authentication tokens for
 
 import hashlib
 import secrets
+import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.dependencies import get_db, get_current_user
 from app.models import APIKey, User
 from app.schemas import APIKeyCreate, APIKeyResponse, APIKeyCreatedResponse
@@ -25,9 +27,9 @@ def create_api_key(
     Generates a secure API key, stores its prefix & SHA-256 hash in DB,
     and returns the raw key to the user (only displayed once).
     """
-    # Generate key: "vis_live_" + 32 random characters
+    # Generate key: prefix + 32 random characters
     raw_secret = secrets.token_hex(16)
-    prefix = "vis_live"
+    prefix = settings.API_KEY_PREFIX
     raw_key = f"{prefix}_{raw_secret}"
 
     # Hash the key using SHA-256
@@ -46,10 +48,16 @@ def create_api_key(
     db.refresh(db_key)
 
     # Attach the raw key to response schema
-    response_data = APIKeyCreatedResponse.model_validate(db_key)
-    response_data.raw_key = raw_key
     
-    return response_data
+    return APIKeyCreatedResponse(
+        id=db_key.id,
+        name=db_key.name,
+        prefix=db_key.prefix,
+        is_active=db_key.is_active,
+        created_at=db_key.created_at,
+        last_used_at=db_key.last_used_at,
+        raw_key=raw_key
+    )
 
 
 @router.get("", response_model=List[APIKeyResponse])
@@ -63,7 +71,7 @@ def list_api_keys(
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_api_key(
-    key_id: str,
+    key_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

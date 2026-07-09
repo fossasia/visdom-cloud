@@ -9,17 +9,18 @@ Loads configuration settings from environment variables or a local .env file.
 Manages database paths, JWT encryption secrets, and token expiration times.
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # Default connection string for local PostgreSQL
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/visdom_cloud"
-    JWT_SECRET: str = "dev-only-insecure-secret-change-me-0123456789"  # Change in production!
+    DATABASE_URL: str
+    COOKIE_SECURE: bool = False
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    API_KEY_PREFIX: str = "visdom_live"
+    PORT: int = 8085
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

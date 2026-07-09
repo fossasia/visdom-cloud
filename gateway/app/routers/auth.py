@@ -3,8 +3,9 @@
 Authentication router handling user registration, logins, JWT refresh rotation, and logout sessions.
 """
 
-import datetime
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
+from app.models import APIKey
+import hashlib
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, status, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import jwt
@@ -77,7 +78,7 @@ def login(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=True,  # HTTPS transfer in production
+        secure=settings.COOKIE_SECURE,  # HTTPS transfer in production
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",  # scope cookie to auth endpoints
@@ -127,7 +128,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         key="refresh_token",
         value=new_refresh_token,
         httponly=True,
-        secure=True,
+        secure=settings.COOKIE_SECURE,
         samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",
@@ -147,3 +148,31 @@ def logout(response: Response):
 def get_user_profile(current_user: User = Depends(get_current_user)):
     """Returns the current authenticated user's profile info."""
     return current_user
+
+@router.get("/key-check")
+def check_api_key(
+    x_api_key: str = Header(None, alias="X-API-KEY"),
+    db: Session = Depends(get_db)
+):
+    """Verifies if an API Key is valid and returns the owner details"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="X-API-KEY header is missing.")
+
+    # hash the incoming key to match the db hash
+    hashed_key = hashlib.sha256(x_api_key.encode("utf-8")).hexdigest()
+
+    # query the key in db
+    key_record = (
+        db.query(APIKey)
+        .filter(APIKey.hashed_key == hashed_key, APIKey.is_active.is_(True))
+        .first()
+    )
+    if not key_record:
+        raise HTTPException(status_code=401, detail="Invalid or inactive API key.")
+
+
+    # return user detail
+    user = db.query(User).filter(User.id == key_record.user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid API key owner.")
+    return {"status": "authenticated", "email": user.email, "key_name": key_record.name}

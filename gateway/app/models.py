@@ -42,7 +42,7 @@ class APIKey(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)  # e.g., "training-cluster"
-    prefix = Column(String, nullable=False)  # e.g., "vis_live"
+    prefix = Column(String, nullable=False)  # e.g., "visdom_live"
     hashed_key = Column(String, unique=True, index=True, nullable=False)  # SHA-256 hash
     is_active = Column(Boolean, default=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
