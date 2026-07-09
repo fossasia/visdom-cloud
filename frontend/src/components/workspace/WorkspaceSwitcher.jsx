@@ -13,7 +13,7 @@ const WorkspaceSwitcher = ({ workspaces, activeWorkspace, onSwitch, onCreated, o
         <span className="gc-ws-trigger-label">
           {activeWorkspace ? activeWorkspace.name : 'Select workspace'}
         </span>
-        <ChevronDown size={14} style={{ marginLeft: 'auto', flexShrink: 0 }} />
+        <ChevronDown size={14} className="gc-ml-auto gc-shrink-0" />
       </button>
 
       {showSelect && (

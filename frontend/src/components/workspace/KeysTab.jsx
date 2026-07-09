@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Key, Plus, Terminal, Trash2, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { parseApiError } from '../../utils/helpers';
 
 const KeysTab = () => {
   const [keys, setKeys] = useState([]);
@@ -38,14 +39,7 @@ const KeysTab = () => {
       setKeyName('');
       fetchKeys();
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      let errorMsg = 'Failed to create API key.';
-      if (typeof detail === 'string') {
-        errorMsg = detail;
-      } else if (Array.isArray(detail)) {
-        errorMsg = detail.map((d) => d.msg).join(', ');
-      }
-      setError(errorMsg);
+      setError(parseApiError(err, 'Failed to create API key.'));
     } finally {
       setSubmitting(false);
     }
@@ -72,7 +66,7 @@ const KeysTab = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="gc-flex-col-gap-lg">
       <section className="gc-panel">
         <div className="gc-panel-header">
           <span className="gc-panel-title">
@@ -86,17 +80,16 @@ const KeysTab = () => {
           visualization logs securely to your workspaces.
         </p>
 
-        <form onSubmit={handleCreateKey} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <form onSubmit={handleCreateKey} className="gc-flex-row-gap-md">
           <input
             type="text"
             required
-            className="gc-input"
+            className="gc-input gc-flex-1"
             placeholder="Key name (e.g., GPU-Node-01)"
             value={keyName}
             onChange={(e) => setKeyName(e.target.value)}
-            style={{ flex: 1 }}
           />
-          <button type="submit" disabled={submitting} className="gc-btn gc-btn-primary" style={{ whiteSpace: 'nowrap' }}>
+          <button type="submit" disabled={submitting} className="gc-btn gc-btn-primary gc-whitespace-nowrap">
             <Plus size={14} />
             Generate
           </button>
@@ -105,39 +98,25 @@ const KeysTab = () => {
         {error && <div className="gc-form-error">{error}</div>}
 
         {newRawKey && (
-          <div className="gc-form-success" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600 }}>Secret API Key Generated</span>
+          <div className="gc-form-success gc-success-box-column">
+            <div className="gc-flex-row-between">
+              <span className="gc-font-semibold">Secret API Key Generated</span>
               <button
                 onClick={() => setNewRawKey(null)}
-                style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex' }}
+                className="gc-btn-unstyled-flex"
                 type="button"
               >
                 <X size={14} />
               </button>
             </div>
-            <div style={{ fontSize: '12px', opacity: 0.85 }}>
+            <div className="gc-text-desc-muted">
               Please copy this key now. It will not be shown to you again for security reasons.
             </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                background: '#212529',
-                padding: '8px 12px',
-                borderRadius: 'var(--vc-radius-sm)',
-                fontFamily: 'monospace',
-                fontSize: '13px',
-                color: '#ffffff',
-                wordBreak: 'break-all',
-              }}
-            >
+            <div className="gc-raw-key-box">
               <span>{newRawKey}</span>
               <button
                 onClick={handleCopyKey}
-                style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex' }}
+                className="gc-btn-unstyled-flex"
                 type="button"
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}

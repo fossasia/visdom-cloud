@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Building2, LogOut, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import DeleteWorkspaceModal from './DeleteWorkspaceModal';
+import { parseApiError } from '../../utils/helpers';
 
 const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, onLeave }) => {
   const [leaving, setLeaving] = useState(false);
@@ -22,8 +23,7 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
       await api.delete(`/workspaces/${workspace.id}/members/${currentUserId}`);
       onLeave(workspace.id);
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to leave workspace.');
+      setError(parseApiError(err, 'Failed to leave workspace.'));
       setLeaving(false);
     }
   };
@@ -37,18 +37,18 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+      <div className="gc-settings-grid">
         <div>
-          <div className="gc-label" style={{ marginBottom: '4px' }}>Name</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--vc-text)' }}>{workspace.name}</div>
+          <div className="gc-label gc-mb-1">Workspace Name</div>
+          <div className="gc-settings-value">{workspace.name}</div>
         </div>
         <div>
-          <div className="gc-label" style={{ marginBottom: '4px' }}>Slug</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--vc-text)' }}>{workspace.slug}</div>
+          <div className="gc-label gc-mb-1">Slug</div>
+          <div className="gc-settings-value">{workspace.slug}</div>
         </div>
         <div>
-          <div className="gc-label" style={{ marginBottom: '4px' }}>Workspace ID</div>
-          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--vc-text-muted)', wordBreak: 'break-all' }}>
+          <div className="gc-label gc-mb-1">Workspace ID</div>
+          <div className="gc-settings-id">
             {workspace.id}
           </div>
         </div>
@@ -56,8 +56,8 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
 
       {error && <div className="gc-form-error">{error}</div>}
 
-      <div style={{ borderTop: '1px solid var(--vc-border)', paddingTop: '16px', marginBottom: isAdmin ? '16px' : 0 }}>
-        <div className="gc-panel-title" style={{ fontSize: '13px', marginBottom: '8px' }}>
+      <div className={`gc-border-section-t ${isAdmin ? 'gc-mb-lg' : 'mb-0'}`}>
+        <div className="gc-panel-title gc-section-title-compact">
           Membership
         </div>
         <p className="gc-panel-sub">
@@ -72,8 +72,8 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
       </div>
 
       {isAdmin && (
-        <div style={{ borderTop: '1px solid var(--vc-border)', paddingTop: '16px' }}>
-          <div className="gc-panel-title" style={{ fontSize: '13px', color: 'var(--vc-danger)', marginBottom: '8px' }}>
+        <div className="gc-border-section-t">
+          <div className="gc-panel-title gc-section-title-compact gc-text-danger">
             Danger Zone
           </div>
           <p className="gc-panel-sub">

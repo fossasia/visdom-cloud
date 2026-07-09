@@ -7,19 +7,32 @@ import CreateWorkspaceModal from './CreateWorkspaceModal';
 
 const RECENT_KEY = 'visdom-recent-workspaces';
 const MAX_RECENT = 8;
+const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
 const getRecentIds = () => {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const items = JSON.parse(raw);
+    const now = Date.now();
+    const validItems = items.filter((item) => now - item.timestamp <= THREE_HOURS_MS);
+    return validItems.map((item) => item.id);
   } catch {
     return [];
   }
 };
 
 const pushRecentId = (id) => {
-  const updated = [id, ...getRecentIds().filter((existingId) => existingId !== id)].slice(0, MAX_RECENT);
-  localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    const items = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    const filtered = items.filter((item) => item.id !== id && now - item.timestamp <= THREE_HOURS_MS);
+    const updated = [{ id, timestamp: now }, ...filtered].slice(0, MAX_RECENT);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+  } catch {
+    // ignore
+  }
 };
 
 const SECTIONS = [
@@ -77,7 +90,7 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
     <ModalPortal onClose={onClose} wide>
       <div className="gc-modal-header">
         <span className="gc-modal-title">Select a workspace</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="gc-flex-row-center">
           <button type="button" className="gc-btn gc-btn-primary" onClick={() => setShowCreateModal(true)}>
             <Plus size={14} />
             New Workspace
@@ -88,39 +101,28 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
         </div>
       </div>
 
-      <div style={{ position: 'relative', marginBottom: '12px' }}>
+      <div className="gc-mb-lg relative">
         <Search
           size={14}
-          style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--vc-text-muted)' }}
+          className="gc-absolute-search-icon"
         />
         <input
           type="text"
           autoFocus
-          className="gc-input"
+          className="gc-input gc-input-pl-search"
           placeholder="Search workspaces..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ paddingLeft: '32px' }}
         />
       </div>
 
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', borderBottom: '1px solid var(--vc-border)' }}>
+      <div className="gc-tabs-header-border">
         {SECTIONS.map((s) => (
           <button
             key={s.id}
             type="button"
             onClick={() => setSection(s.id)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              borderBottom: section === s.id ? '2px solid var(--vc-blue)' : '2px solid transparent',
-              color: section === s.id ? 'var(--vc-blue)' : 'var(--vc-text-muted)',
-              fontWeight: 600,
-              fontSize: '13px',
-              padding: '8px 10px',
-              cursor: 'pointer',
-              marginBottom: '-1px',
-            }}
+            className={`gc-tab-link-select ${section === s.id ? 'active' : ''}`}
           >
             {s.label}
           </button>
@@ -129,7 +131,7 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
 
       <div className="gc-ws-select-list">
         {filtered.length === 0 ? (
-          <div className="gc-empty" style={{ border: 'none' }}>
+          <div className="gc-empty gc-border-none">
             {workspaces.length === 0
               ? "You don't belong to any workspaces yet."
               : section === 'starred'
@@ -146,29 +148,29 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
                 onClick={() => handleSwitch(ws)}
                 className={`gc-ws-select-row ${isActive ? 'active' : ''}`}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <Building2 size={14} style={{ color: 'var(--vc-text-muted)', flexShrink: 0 }} />
-                  <span style={{ minWidth: 0 }}>
-                    <div className="gc-ws-item-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span className="gc-flex-row-gap-sm-min-w">
+                  <Building2 size={14} className="gc-shrink-0" />
+                  <span className="gc-min-w-0">
+                    <div className="gc-ws-item-name gc-truncate">
                       {ws.name}
                     </div>
-                    <div className="gc-ws-item-slug" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ws.slug} <span style={{ fontFamily: 'monospace' }}>· {ws.id}</span>
+                    <div className="gc-ws-item-slug gc-truncate">
+                      {ws.slug} <span className="gc-font-mono">· {ws.id}</span>
                     </div>
                   </span>
                 </span>
 
-                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                <span className="gc-flex-row-gap-sm-min-w gc-shrink-0">
                   <span
                     role="button"
                     tabIndex={0}
                     onClick={(e) => handleToggleStar(e, ws)}
                     title={ws.starred ? 'Unstar workspace' : 'Star workspace'}
-                    style={{ display: 'flex', cursor: 'pointer', color: ws.starred ? '#f59e0b' : 'var(--vc-text-muted)' }}
+                    className={ws.starred ? 'gc-text-star-active' : 'gc-text-star-inactive'}
                   >
                     <Star size={15} fill={ws.starred ? '#f59e0b' : 'none'} />
                   </span>
-                  {isActive && <Check size={15} style={{ color: 'var(--vc-blue)' }} />}
+                  {isActive && <Check size={15} className="gc-text-blue" />}
                 </span>
               </button>
             );

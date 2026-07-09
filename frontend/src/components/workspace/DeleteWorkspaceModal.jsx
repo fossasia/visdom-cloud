@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { parseApiError } from '../../utils/helpers';
 import ModalPortal from '../ModalPortal';
 
 const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
@@ -22,8 +23,7 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
       onDeleted(workspace.id);
       onClose();
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to delete workspace.');
+      setError(parseApiError(err, 'Failed to delete workspace.'));
       setSubmitting(false);
     }
   };
@@ -31,7 +31,7 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
   return (
     <ModalPortal onClose={onClose}>
       <div className="gc-modal-header">
-        <span className="gc-modal-title" style={{ color: 'var(--vc-danger)' }}>
+        <span className="gc-modal-title gc-text-danger">
           Delete Workspace
         </span>
         <button className="gc-modal-close" onClick={onClose} type="button">
@@ -39,19 +39,9 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
         </button>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          background: 'rgba(217, 83, 79, 0.08)',
-          border: '1px solid var(--vc-danger)',
-          borderRadius: 'var(--vc-radius-sm)',
-          padding: '12px',
-          marginBottom: '16px',
-        }}
-      >
-        <AlertTriangle size={16} style={{ color: 'var(--vc-danger)', flexShrink: 0, marginTop: '1px' }} />
-        <p style={{ margin: 0, fontSize: '13px', color: 'var(--vc-text)', lineHeight: 1.5 }}>
+      <div className="gc-warning-box">
+        <AlertTriangle size={16} className="gc-warning-icon" />
+        <p className="gc-warning-text">
           This action <strong>cannot be undone</strong>. This will permanently delete the{' '}
           <strong>{workspace.name}</strong> workspace, along with all of its memberships, API access, and shared
           links.
@@ -80,8 +70,7 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
         <button
           type="submit"
           disabled={!isMatch || submitting}
-          className="gc-btn gc-btn-danger"
-          style={{ width: '100%', marginTop: '4px' }}
+          className="gc-btn gc-btn-danger gc-w-full gc-mt-1"
         >
           {submitting ? 'Deleting...' : 'I understand, delete this workspace'}
         </button>

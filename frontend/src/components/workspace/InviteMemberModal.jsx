@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { parseApiError } from '../../utils/helpers';
 import ModalPortal from '../ModalPortal';
 
 const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
@@ -23,8 +24,7 @@ const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
       });
       onInvited(response.data);
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to invite member.');
+      setError(parseApiError(err, 'Failed to invite member.'));
     } finally {
       setSubmitting(false);
     }
@@ -67,8 +67,7 @@ const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
         <button
           type="submit"
           disabled={submitting}
-          className="gc-btn gc-btn-primary"
-          style={{ width: '100%', marginTop: '4px' }}
+          className="gc-btn gc-btn-primary gc-w-full gc-mt-1"
         >
           {submitting ? 'Sending Invite...' : 'Send Invite'}
         </button>

@@ -3,7 +3,6 @@ import React, { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 
-// TODO: replace these browser alerts with unified notification system.
 const JoinWorkspace = () => {
   const { linkId } = useParams();
   const navigate = useNavigate();
@@ -51,7 +50,7 @@ const JoinWorkspace = () => {
 
   return (
     <div className="auth-wrapper">
-      <div className="visdom-panel auth-panel" style={{ textAlign: 'center' }}>
+      <div className="visdom-panel auth-panel gc-text-center">
         Processing invitation...
       </div>
     </div>

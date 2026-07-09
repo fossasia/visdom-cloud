@@ -8,7 +8,6 @@ import MembersTab from '../components/workspace/MembersTab';
 import SharedLinksTab from '../components/workspace/SharedLinksTab';
 import KeysTab from '../components/workspace/KeysTab';
 import BillingTab from '../components/workspace/BillingTab';
-import ProfileModal from '../components/ProfileModal';
 
 const TABS = [
   { id: 'workspaces', label: 'Workspaces', icon: Building2 },
@@ -27,14 +26,13 @@ const Dashboard = () => {
   const [workspaces, setWorkspaces] = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
   });
 
-  // Keep the active tab sticky across page refreshes.
+  const isAdmin = activeWorkspace?.role === 'admin';
+
   useEffect(() => {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
@@ -45,11 +43,13 @@ const Dashboard = () => {
       const response = await api.get('/workspaces');
       setWorkspaces(response.data);
       setActiveWorkspace((prev) => {
-        if (prev && response.data.some((ws) => ws.id === prev.id)) return prev;
+        if (prev) {
+          return response.data.find((ws) => ws.id === prev.id) || null;
+        }
         return response.data[0] || null;
       });
     } catch (err) {
-      console.error('Error fetching workspaces', err);
+      console.error(err);
     } finally {
       setWorkspacesLoading(false);
     }
@@ -59,53 +59,23 @@ const Dashboard = () => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Determine whether the current user is an admin of the active workspace,
-  // to gate admin-only actions across tabs.
-  useEffect(() => {
-    if (!activeWorkspace || !user) {
-      setIsAdmin(false);
-      return;
-    }
-
-    let cancelled = false;
-    api
-      .get(`/workspaces/${activeWorkspace.id}/members`)
-      .then((response) => {
-        if (cancelled) return;
-        const self = response.data.find((m) => m.user_id === user.id);
-        setIsAdmin(self?.role === 'admin');
-      })
-      .catch(() => {
-        if (!cancelled) setIsAdmin(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeWorkspace, user]);
-
   const handleWorkspaceCreated = (workspace) => {
     setWorkspaces((prev) => [...prev, workspace]);
     setActiveWorkspace(workspace);
     setActiveTab('workspaces');
   };
 
-  // Shared by "delete workspace" (admin) and "leave workspace" (any member) —
-  // both mean this workspace should disappear from my own list right away.
-  // Deliberately don't auto-select another workspace afterwards — silently
-  // dropping the user into a different workspace's settings is confusing;
-  // land on a neutral "pick a workspace" state instead.
+  const handleWorkspaceUpdated = (workspace) => {
+    setWorkspaces((prev) =>
+      prev.map((ws) => (ws.id === workspace.id ? workspace : ws))
+    );
+    setActiveWorkspace((prev) => (prev?.id === workspace.id ? workspace : prev));
+  };
+
   const handleWorkspaceRemoved = (workspaceId) => {
     setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
     setActiveWorkspace((prev) => (prev?.id === workspaceId ? null : prev));
     setActiveTab('workspaces');
-  };
-
-  // A workspace's own fields changed in place (e.g. starred toggled) —
-  // patch it in both the list and the active selection, no refetch needed.
-  const handleWorkspaceUpdated = (updated) => {
-    setWorkspaces((prev) => prev.map((ws) => (ws.id === updated.id ? updated : ws)));
-    setActiveWorkspace((prev) => (prev?.id === updated.id ? updated : prev));
   };
 
   const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
@@ -145,23 +115,15 @@ const Dashboard = () => {
         </nav>
 
         <div className="gc-sidebar-footer">
-          <button
-            className="gc-sidebar-user"
-            onClick={() => setShowProfile(true)}
-            type="button"
-            style={{ background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, width: '100%' }}
-          >
-            <div style={{ fontWeight: 600, color: '#ffffff' }}>@{user?.username}</div>
-            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
-          </button>
+          <div className="gc-sidebar-user gc-truncate">
+            <div className="gc-sidebar-user-email">{user?.email}</div>
+          </div>
           <button onClick={logout} className="gc-btn" type="button">
             <LogOut size={13} />
             Logout
           </button>
         </div>
       </aside>
-
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
 
       <main className="gc-main">
         {needsWorkspace ? (

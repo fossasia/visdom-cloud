@@ -36,7 +36,7 @@ const BillingTab = ({ user }) => {
   const currentTier = user?.tier || 'free';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="gc-flex-col-gap-lg">
       <section className="gc-panel">
         <div className="gc-panel-header">
           <span className="gc-panel-title">
@@ -61,9 +61,9 @@ const BillingTab = ({ user }) => {
                   {plan.price !== null && <span> / month</span>}
                 </div>
                 <ul className="gc-price-features">
-                  {plan.features.map((feature) => (
+                   {plan.features.map((feature) => (
                     <li key={feature}>
-                      <CheckCircle size={13} style={{ flexShrink: 0, color: 'var(--vc-success)' }} />
+                      <CheckCircle size={13} className="gc-shrink-0 gc-text-success" />
                       {feature}
                     </li>
                   ))}

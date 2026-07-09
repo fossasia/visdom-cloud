@@ -2,12 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Link2, Lock, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
-
-const ROLE_BADGE = {
-  admin: 'gc-badge-admin',
-  member: 'gc-badge-member',
-  viewer: 'gc-badge-viewer',
-};
+import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
 
 const EXPIRY_PRESETS = [
   { value: 'none', label: 'No expiration' },
@@ -71,8 +66,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       setCustomExpiresAt('');
       setPassword('');
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to generate share link.');
+      setError(parseApiError(err, 'Failed to generate share link.'));
     } finally {
       setSubmitting(false);
     }
@@ -112,9 +106,9 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       {isAdmin && (
         <form
           onSubmit={handleCreate}
-          style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'flex-end' }}
+          className="gc-flex-row-end"
         >
-          <div style={{ flex: '1 1 140px' }}>
+          <div className="gc-flex-grow-140">
             <label className="gc-label">Joins as</label>
             <select className="gc-select" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="admin">Admin</option>
@@ -122,7 +116,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
               <option value="viewer">Viewer</option>
             </select>
           </div>
-          <div style={{ flex: '1 1 140px' }}>
+          <div className="gc-flex-grow-140">
             <label className="gc-label">Expires</label>
             <select className="gc-select" value={expiryPreset} onChange={(e) => setExpiryPreset(e.target.value)}>
               {EXPIRY_PRESETS.map((preset) => (
@@ -133,7 +127,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
             </select>
           </div>
           {expiryPreset === 'custom' && (
-            <div style={{ flex: '1 1 180px' }}>
+            <div className="gc-flex-grow-180">
               <label className="gc-label">Custom date &amp; time</label>
               <input
                 type="datetime-local"
@@ -143,7 +137,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
               />
             </div>
           )}
-          <div style={{ flex: '1 1 180px' }}>
+          <div className="gc-flex-grow-180">
             <label className="gc-label">Password (optional)</label>
             <input
               type="text"
@@ -153,7 +147,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <button type="submit" disabled={submitting} className="gc-btn gc-btn-primary" style={{ height: '34px' }}>
+          <button type="submit" disabled={submitting} className="gc-btn gc-btn-primary gc-h-34">
             {submitting ? 'Generating...' : 'Generate Link'}
           </button>
         </form>
@@ -169,8 +163,8 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
         <div>
           {links.map((link) => (
             <div key={link.id} className="gc-row">
-              <div style={{ minWidth: 0 }}>
-                <div className="gc-row-main" style={{ fontFamily: 'monospace', fontSize: '12px', wordBreak: 'break-all' }}>
+              <div className="gc-min-w-0">
+                <div className="gc-row-main gc-font-mono-small">
                   /share/{link.id}
                 </div>
                 <div className="gc-row-meta">
@@ -185,7 +179,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+              <div className="gc-actions-row">
                 <button className="gc-btn gc-btn-icon" onClick={() => handleCopy(link)} title="Copy link" type="button">
                   {copiedId === link.id ? <Check size={13} /> : <Copy size={13} />}
                 </button>
