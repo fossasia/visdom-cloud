@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import JoinWorkspace from './pages/JoinWorkspace';
 
 function App() {
   return (
@@ -12,13 +13,21 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
-          } 
+          }
+        />
+        <Route
+          path="/share/:linkId"
+          element={
+            <ProtectedRoute>
+              <JoinWorkspace />
+            </ProtectedRoute>
+          }
         />
         {/* Catch-all redirects to Dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />

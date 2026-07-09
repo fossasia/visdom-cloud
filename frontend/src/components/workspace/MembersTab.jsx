@@ -1,0 +1,148 @@
+/* Copyright 2017-present, The Visdom Authors */
+import React, { useCallback, useEffect, useState } from 'react';
+import { Crown, UserPlus, Users, X } from 'lucide-react';
+import { api } from '../../context/AuthContext';
+import InviteMemberModal from './InviteMemberModal';
+
+const ROLE_BADGE = {
+  admin: 'gc-badge-admin',
+  member: 'gc-badge-member',
+  viewer: 'gc-badge-viewer',
+};
+
+const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showInvite, setShowInvite] = useState(false);
+
+  const fetchMembers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/workspaces/${workspaceId}/members`);
+      setMembers(response.data);
+    } catch (err) {
+      console.error('Error fetching members', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
+
+  const handleInvited = (member) => {
+    setShowInvite(false);
+    setMembers((prev) => [...prev, member]);
+  };
+
+  const handleRoleChange = async (userId, role) => {
+    setError('');
+    try {
+      const response = await api.put(`/workspaces/${workspaceId}/members/${userId}`, { role });
+      setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to update role.');
+    }
+  };
+
+  const handleRemove = async (userId) => {
+    if (!window.confirm('Remove this member from the workspace?')) return;
+
+    setError('');
+    try {
+      await api.delete(`/workspaces/${workspaceId}/members/${userId}`);
+      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Failed to remove member.');
+    }
+  };
+
+  return (
+    <section className="gc-panel">
+      <div className="gc-panel-header">
+        <span className="gc-panel-title">
+          <Users size={15} />
+          Members ({members.length})
+        </span>
+        {isAdmin && (
+          <button className="gc-btn gc-btn-primary" onClick={() => setShowInvite(true)} type="button">
+            <UserPlus size={13} />
+            Invite
+          </button>
+        )}
+      </div>
+
+      {error && <div className="gc-form-error">{error}</div>}
+
+      {loading ? (
+        <div className="gc-empty">Loading members...</div>
+      ) : members.length === 0 ? (
+        <div className="gc-empty">No members in this workspace yet.</div>
+      ) : (
+        <div>
+          {members.map((m) => {
+            const isSelf = m.user_id === currentUserId;
+            const isOwner = m.user_id === ownerId;
+            const canRemove = isAdmin && !isSelf && !isOwner;
+            return (
+              <div key={m.user_id} className="gc-row">
+                <div>
+                  <div className="gc-row-main">{m.email}{isSelf && ' (you)'}</div>
+                  <div className="gc-row-meta">
+                    <span className={`gc-badge ${ROLE_BADGE[m.role] || 'gc-badge-member'}`}>{m.role}</span>
+                    {isOwner && (
+                      <span className="gc-badge gc-badge-admin">
+                        <Crown size={10} />
+                        Owner
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <select
+                      className="gc-select"
+                      style={{ width: 'auto', height: '28px' }}
+                      value={m.role}
+                      onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                    {canRemove && (
+                      <button
+                        className="gc-btn gc-btn-danger gc-btn-icon"
+                        style={{ height: '28px' }}
+                        onClick={() => handleRemove(m.user_id)}
+                        title="Remove member"
+                        type="button"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showInvite && (
+        <InviteMemberModal
+          workspaceId={workspaceId}
+          onClose={() => setShowInvite(false)}
+          onInvited={handleInvited}
+        />
+      )}
+    </section>
+  );
+};
+
+export default MembersTab;

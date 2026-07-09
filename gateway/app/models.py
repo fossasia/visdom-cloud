@@ -35,6 +35,7 @@ class User(Base):
 
     # Relationships
     api_keys = relationship("APIKey", back_populates="owner", cascade="all, delete-orphan")
+    memberships = relationship("Membership", back_populates="user", cascade="all, delete-orphan")
 
 
 class APIKey(Base):
@@ -51,3 +52,41 @@ class APIKey(Base):
 
     # Relationships
     owner = relationship("User", back_populates="api_keys")
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    slug = Column(String, unique=True, nullable=False, index=True)  # e.g., 'nlp-labs'
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+
+    # Relationships
+    memberships = relationship("Membership", back_populates="workspace", cascade="all, delete-orphan")
+    shared_links = relationship("SharedLink", back_populates="workspace", cascade="all, delete-orphan")
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), primary_key=True)
+    role = Column(String, default="member")  # admin, member, viewer
+
+    # Relationships
+    user = relationship("User", back_populates="memberships")
+    workspace = relationship("Workspace", back_populates="memberships")
+
+
+class SharedLink(Base):
+    __tablename__ = "shared_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # The secret public token
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False)
+    role = Column(String, default="member")  # role granted to whoever joins via this link
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    password_hash = Column(String, nullable=True)  # Optional link password protection
+
+    # Relationships
+    workspace = relationship("Workspace", back_populates="shared_links")
