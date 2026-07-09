@@ -26,6 +26,7 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     stripe_customer_id = Column(String, nullable=True)
     tier = Column(String, default="free")  # free, pro, enterprise
@@ -73,6 +74,7 @@ class Membership(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True)
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), primary_key=True)
     role = Column(String, default="member")  # admin, member, viewer
+    starred = Column(Boolean, default=False)
 
     # Relationships
     user = relationship("User", back_populates="memberships")

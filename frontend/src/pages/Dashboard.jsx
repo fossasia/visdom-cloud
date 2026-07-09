@@ -8,6 +8,7 @@ import MembersTab from '../components/workspace/MembersTab';
 import SharedLinksTab from '../components/workspace/SharedLinksTab';
 import KeysTab from '../components/workspace/KeysTab';
 import BillingTab from '../components/workspace/BillingTab';
+import ProfileModal from '../components/ProfileModal';
 
 const TABS = [
   { id: 'workspaces', label: 'Workspaces', icon: Building2 },
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
@@ -90,13 +92,20 @@ const Dashboard = () => {
 
   // Shared by "delete workspace" (admin) and "leave workspace" (any member) —
   // both mean this workspace should disappear from my own list right away.
+  // Deliberately don't auto-select another workspace afterwards — silently
+  // dropping the user into a different workspace's settings is confusing;
+  // land on a neutral "pick a workspace" state instead.
   const handleWorkspaceRemoved = (workspaceId) => {
-    setWorkspaces((prev) => {
-      const remaining = prev.filter((ws) => ws.id !== workspaceId);
-      setActiveWorkspace(remaining[0] || null);
-      return remaining;
-    });
+    setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
+    setActiveWorkspace((prev) => (prev?.id === workspaceId ? null : prev));
     setActiveTab('workspaces');
+  };
+
+  // A workspace's own fields changed in place (e.g. starred toggled) —
+  // patch it in both the list and the active selection, no refetch needed.
+  const handleWorkspaceUpdated = (updated) => {
+    setWorkspaces((prev) => prev.map((ws) => (ws.id === updated.id ? updated : ws)));
+    setActiveWorkspace((prev) => (prev?.id === updated.id ? updated : prev));
   };
 
   const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
@@ -114,6 +123,7 @@ const Dashboard = () => {
             activeWorkspace={activeWorkspace}
             onSwitch={setActiveWorkspace}
             onCreated={handleWorkspaceCreated}
+            onWorkspaceUpdated={handleWorkspaceUpdated}
           />
         )}
 
@@ -135,7 +145,15 @@ const Dashboard = () => {
         </nav>
 
         <div className="gc-sidebar-footer">
-          <div className="gc-sidebar-user">{user?.email}</div>
+          <button
+            className="gc-sidebar-user"
+            onClick={() => setShowProfile(true)}
+            type="button"
+            style={{ background: 'transparent', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, width: '100%' }}
+          >
+            <div style={{ fontWeight: 600, color: '#ffffff' }}>@{user?.username}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+          </button>
           <button onClick={logout} className="gc-btn" type="button">
             <LogOut size={13} />
             Logout
@@ -143,11 +161,15 @@ const Dashboard = () => {
         </div>
       </aside>
 
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
+
       <main className="gc-main">
         {needsWorkspace ? (
           <section className="gc-panel">
             <div className="gc-empty">
-              You don't have a workspace yet. Use "Add Workspace" in the sidebar to create your first one.
+              {workspaces.length === 0
+                ? 'You don\'t have a workspace yet. Use "Add Workspace" in the sidebar to create your first one.'
+                : 'Select a workspace from the sidebar to get started.'}
             </div>
           </section>
         ) : (

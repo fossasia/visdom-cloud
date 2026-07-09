@@ -554,6 +554,37 @@ body {
   padding: 24px;
 }
 
+.gc-modal-wide {
+  max-width: 520px;
+}
+
+.gc-ws-select-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-sm);
+}
+
+.gc-ws-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--vc-border);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--vc-text);
+}
+
+.gc-ws-select-row:last-child { border-bottom: none; }
+.gc-ws-select-row:hover { background: var(--vc-bg); }
+.gc-ws-select-row.active { background: rgba(33, 133, 208, 0.08); }
+
 .gc-modal-header {
   display: flex;
   align-items: center;

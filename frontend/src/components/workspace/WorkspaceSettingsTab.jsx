@@ -2,30 +2,14 @@
 import React, { useState } from 'react';
 import { Building2, LogOut, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import DeleteWorkspaceModal from './DeleteWorkspaceModal';
 
 const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, onLeave }) => {
-  const [deleting, setDeleting] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const isOwner = workspace.created_by === currentUserId;
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete workspace "${workspace.name}"? This cannot be undone.`)) {
-      return;
-    }
-
-    setDeleting(true);
-    setError('');
-    try {
-      await api.delete(`/workspaces/${workspace.id}`);
-      onDeleted(workspace.id);
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to delete workspace.');
-      setDeleting(false);
-    }
-  };
 
   const handleLeave = async () => {
     if (!window.confirm(`Leave workspace "${workspace.name}"?`)) {
@@ -95,11 +79,19 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
           <p className="gc-panel-sub">
             Deleting a workspace permanently removes all memberships and shared links associated with it.
           </p>
-          <button className="gc-btn gc-btn-danger" onClick={handleDelete} disabled={deleting} type="button">
+          <button className="gc-btn gc-btn-danger" onClick={() => setShowDeleteModal(true)} type="button">
             <Trash2 size={13} />
-            {deleting ? 'Deleting...' : 'Delete Workspace'}
+            Delete Workspace
           </button>
         </div>
+      )}
+
+      {showDeleteModal && (
+        <DeleteWorkspaceModal
+          workspace={workspace}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={onDeleted}
+        />
       )}
     </section>
   );

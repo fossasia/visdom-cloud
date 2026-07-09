@@ -13,13 +13,25 @@ import jwt
 from app.config import settings
 from app.dependencies import get_db, get_current_user
 from app.models import User
-from app.schemas import UserCreate, UserResponse, Token
+from app.schemas import (
+    GeneratedUsernameResponse,
+    Token,
+    UsernameAvailabilityResponse,
+    UsernameUpdate,
+    UserCreate,
+    UserResponse,
+)
 from app.security import (
     get_password_hash,
     verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
+)
+from app.username import (
+    generate_unique_username,
+    is_valid_username_format,
+    normalize_username,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -34,14 +46,66 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email already exists."
         )
-    
+
+    if user_in.username:
+        username = normalize_username(user_in.username)
+        if db.query(User).filter(User.username == username).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This username is already taken.",
+            )
+    else:
+        username = generate_unique_username(db, seed=user_in.email.split("@")[0])
+
     hashed_pwd = get_password_hash(user_in.password)
-    new_user = User(email=user_in.email, password_hash=hashed_pwd)
-    
+    new_user = User(email=user_in.email, username=username, password_hash=hashed_pwd)
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
+
+@router.get("/username-availability", response_model=UsernameAvailabilityResponse)
+def check_username_availability(username: str, db: Session = Depends(get_db)):
+    """Checks whether a username is valid and not already taken (used while typing)."""
+    normalized = normalize_username(username)
+    if not is_valid_username_format(normalized):
+        return {"available": False}
+
+    exists = db.query(User).filter(User.username == normalized).first()
+    return {"available": exists is None}
+
+
+@router.get("/generate-username", response_model=GeneratedUsernameResponse)
+def generate_username_suggestion(seed: str | None = None, db: Session = Depends(get_db)):
+    """Returns a fresh, available, randomly generated username suggestion."""
+    return {"username": generate_unique_username(db, seed=seed)}
+
+
+@router.patch("/me/username", response_model=UserResponse)
+def update_username(
+    payload: UsernameUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Updates the current user's username."""
+    username = normalize_username(payload.username)
+
+    if username == current_user.username:
+        return current_user
+
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This username is already taken.",
+        )
+
+    current_user.username = username
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.post("/login", response_model=Token)

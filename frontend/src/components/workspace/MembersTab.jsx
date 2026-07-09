@@ -87,7 +87,10 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
           {members.map((m) => {
             const isSelf = m.user_id === currentUserId;
             const isOwner = m.user_id === ownerId;
-            const canRemove = isAdmin && !isSelf && !isOwner;
+            // Nobody can change their own role, and nobody but the workspace
+            // owner's own creation locks their role permanently — so the
+            // only rows an admin can manage are other, non-owner members.
+            const canManage = isAdmin && !isSelf && !isOwner;
             return (
               <div key={m.user_id} className="gc-row">
                 <div>
@@ -103,7 +106,7 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                   </div>
                 </div>
 
-                {isAdmin && (
+                {canManage && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <select
                       className="gc-select"
@@ -115,17 +118,15 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                       <option value="member">Member</option>
                       <option value="viewer">Viewer</option>
                     </select>
-                    {canRemove && (
-                      <button
-                        className="gc-btn gc-btn-danger gc-btn-icon"
-                        style={{ height: '28px' }}
-                        onClick={() => handleRemove(m.user_id)}
-                        title="Remove member"
-                        type="button"
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
+                    <button
+                      className="gc-btn gc-btn-danger gc-btn-icon"
+                      style={{ height: '28px' }}
+                      onClick={() => handleRemove(m.user_id)}
+                      title="Remove member"
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
                 )}
               </div>

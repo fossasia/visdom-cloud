@@ -22,12 +22,13 @@ from app.schemas.workspace import (
     MemberInvite,
     MemberResponse,
     MemberRoleUpdate,
+    MyWorkspaceResponse,
     SharedLinkCreate,
     SharedLinkJoinRequest,
     SharedLinkJoinResponse,
     SharedLinkResponse,
+    StarredUpdate,
     WorkspaceCreate,
-    WorkspaceResponse,
 )
 from app.security import get_password_hash, verify_password
 
@@ -64,6 +65,17 @@ def _to_member_response(membership: Membership) -> MemberResponse:
     return MemberResponse(user_id=membership.user_id, email=membership.user.email, role=membership.role)
 
 
+def _to_my_workspace_response(workspace: Workspace, membership: Membership) -> MyWorkspaceResponse:
+    return MyWorkspaceResponse(
+        id=workspace.id,
+        name=workspace.name,
+        slug=workspace.slug,
+        created_by=workspace.created_by,
+        role=membership.role,
+        starred=bool(membership.starred),
+    )
+
+
 def _to_shared_link_response(link: SharedLink) -> SharedLinkResponse:
     return SharedLinkResponse(
         id=link.id,
@@ -75,7 +87,7 @@ def _to_shared_link_response(link: SharedLink) -> SharedLinkResponse:
 
 
 # --- WORKSPACES ---
-@router.post("", response_model=WorkspaceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=MyWorkspaceResponse, status_code=status.HTTP_201_CREATED)
 def create_workspace(
     workspace_in: WorkspaceCreate,
     current_user: User = Depends(get_current_user),
@@ -93,24 +105,27 @@ def create_workspace(
     db.add(workspace)
     db.flush()  # populate workspace.id before creating the membership row
 
-    db.add(Membership(user_id=current_user.id, workspace_id=workspace.id, role="admin"))
+    membership = Membership(user_id=current_user.id, workspace_id=workspace.id, role="admin")
+    db.add(membership)
     db.commit()
     db.refresh(workspace)
-    return workspace
+    db.refresh(membership)
+    return _to_my_workspace_response(workspace, membership)
 
 
-@router.get("", response_model=List[WorkspaceResponse])
+@router.get("", response_model=List[MyWorkspaceResponse])
 def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lists all workspaces the current user belongs to."""
-    return (
-        db.query(Workspace)
+    """Lists all workspaces the current user belongs to, with their role and starred flag."""
+    rows = (
+        db.query(Workspace, Membership)
         .join(Membership, Membership.workspace_id == Workspace.id)
         .filter(Membership.user_id == current_user.id)
         .all()
     )
+    return [_to_my_workspace_response(ws, membership) for ws, membership in rows]
 
 
 @router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -124,6 +139,23 @@ def delete_workspace(
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
     db.delete(workspace)
     db.commit()
+
+
+@router.patch("/{workspace_id}/star", response_model=MyWorkspaceResponse)
+def set_workspace_starred(
+    workspace_id: uuid.UUID,
+    payload: StarredUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stars/unstars a workspace for the current user. A personal preference, not admin-gated."""
+    membership = _require_member(db, workspace_id, current_user.id)
+    membership.starred = payload.starred
+    db.commit()
+    db.refresh(membership)
+
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    return _to_my_workspace_response(workspace, membership)
 
 
 # --- MEMBERSHIPS ---
@@ -177,8 +209,25 @@ def update_member_role(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Updates a collaborator's role. Admins only."""
+    """
+    Updates a collaborator's role. Admins only, and only for other members —
+    no one can change their own role, and the workspace owner's role can only
+    ever be set by no one at all (it's fixed once the workspace is created).
+    """
     _require_admin(db, workspace_id, current_user.id)
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannot change your own role.",
+        )
+
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if workspace.created_by == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The workspace owner's role cannot be changed.",
+        )
 
     membership = _get_membership(db, workspace_id, user_id)
     if not membership:
