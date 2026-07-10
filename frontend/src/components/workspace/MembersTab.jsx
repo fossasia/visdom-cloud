@@ -1,6 +1,6 @@
 /* Copyright 2017-present, The Visdom Authors */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Crown, UserPlus, Users, X } from 'lucide-react';
+import { Check, Crown, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import InviteMemberModal from './InviteMemberModal';
 import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
@@ -54,6 +54,32 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
     }
   };
 
+  const handleDecline = async (member, confirmMessage) => {
+    if (!window.confirm(confirmMessage)) return;
+
+    setError('');
+    try {
+      if (member.invite_id) {
+        await api.delete(`/workspaces/${workspaceId}/invites/${member.invite_id}`);
+      } else {
+        await api.delete(`/workspaces/${workspaceId}/members/${member.user_id}`);
+      }
+      setMembers((prev) => prev.filter((m) => m !== member));
+    } catch (err) {
+      setError(parseApiError(err, 'Failed to cancel.'));
+    }
+  };
+
+  const handleApprove = async (userId) => {
+    setError('');
+    try {
+      const response = await api.post(`/workspaces/${workspaceId}/members/${userId}/approve`);
+      setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
+    } catch (err) {
+      setError(parseApiError(err, 'Failed to approve request.'));
+    }
+  };
+
   return (
     <section className="gc-panel">
       <div className="gc-panel-header">
@@ -80,13 +106,30 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
           {members.map((m) => {
             const isSelf = m.user_id === currentUserId;
             const isOwner = m.user_id === ownerId;
-            const canManage = isAdmin && !isSelf && !isOwner;
+            const isPendingApproval = m.status === 'pending_approval';
+            const isPendingAcceptance = m.status === 'pending_acceptance';
+            const isPending = isPendingApproval || isPendingAcceptance;
+            const canManage = isAdmin && !isSelf && !isOwner && !isPending;
             return (
-              <div key={m.user_id} className="gc-row">
+              <div key={m.user_id || m.invite_id} className="gc-row">
                 <div>
                   <div className="gc-row-main">{m.email}{isSelf && ' (you)'}</div>
                   <div className="gc-row-meta">
-                    <span className={`gc-badge ${ROLE_BADGE[m.role] || 'gc-badge-member'}`}>{m.role}</span>
+                    {isPendingApproval && (
+                      <>
+                        <span className="gc-badge gc-badge-viewer">Invitation sent — waiting approval</span>
+                        <span>Requested role: {m.role}</span>
+                      </>
+                    )}
+                    {isPendingAcceptance && (
+                      <>
+                        <span className="gc-badge gc-badge-viewer">Invite sent — awaiting acceptance</span>
+                        <span>Invited as: {m.role}</span>
+                      </>
+                    )}
+                    {!isPending && (
+                      <span className={`gc-badge ${ROLE_BADGE[m.role] || 'gc-badge-member'}`}>{m.role}</span>
+                    )}
                     {isOwner && (
                       <span className="gc-badge gc-badge-admin">
                         <Crown size={10} />
@@ -95,6 +138,40 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                     )}
                   </div>
                 </div>
+
+                {isAdmin && isPendingApproval && (
+                  <div className="gc-flex-row-center">
+                    <button
+                      className="gc-btn gc-btn-icon gc-btn-icon-compact"
+                      onClick={() => handleApprove(m.user_id)}
+                      title="Approve request"
+                      type="button"
+                    >
+                      <Check size={13} />
+                    </button>
+                    <button
+                      className="gc-btn gc-btn-danger gc-btn-icon gc-btn-icon-compact"
+                      onClick={() => handleDecline(m, 'Decline this join request?')}
+                      title="Decline request"
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
+
+                {isAdmin && isPendingAcceptance && (
+                  <div className="gc-flex-row-center">
+                    <button
+                      className="gc-btn gc-btn-danger gc-btn-icon gc-btn-icon-compact"
+                      onClick={() => handleDecline(m, 'Cancel this invite?')}
+                      title="Cancel invite"
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                )}
 
                 {canManage && (
                   <div className="gc-flex-row-center">

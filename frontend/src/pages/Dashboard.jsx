@@ -8,6 +8,7 @@ import MembersTab from '../components/workspace/MembersTab';
 import SharedLinksTab from '../components/workspace/SharedLinksTab';
 import KeysTab from '../components/workspace/KeysTab';
 import BillingTab from '../components/workspace/BillingTab';
+import PendingInvitesBanner from '../components/workspace/PendingInvitesBanner';
 
 const TABS = [
   { id: 'workspaces', label: 'Workspaces', icon: Building2 },
@@ -26,6 +27,7 @@ const Dashboard = () => {
   const [workspaces, setWorkspaces] = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState([]);
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
@@ -55,9 +57,28 @@ const Dashboard = () => {
     }
   }, []);
 
+  const fetchPendingInvites = useCallback(async () => {
+    try {
+      const response = await api.get('/workspaces/invites/pending');
+      setPendingInvites(response.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchWorkspaces();
-  }, [fetchWorkspaces]);
+    fetchPendingInvites();
+  }, [fetchWorkspaces, fetchPendingInvites]);
+
+  const handleInviteAccepted = (workspaceId) => {
+    setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
+    fetchWorkspaces();
+  };
+
+  const handleInviteDeclined = (workspaceId) => {
+    setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
+  };
 
   const handleWorkspaceCreated = (workspace) => {
     setWorkspaces((prev) => [...prev, workspace]);
@@ -126,6 +147,13 @@ const Dashboard = () => {
       </aside>
 
       <main className="gc-main">
+        <PendingInvitesBanner
+          invites={pendingInvites}
+          currentUserId={user?.id}
+          onAccepted={handleInviteAccepted}
+          onDeclined={handleInviteDeclined}
+        />
+
         {needsWorkspace ? (
           <section className="gc-panel">
             <div className="gc-empty">
@@ -155,7 +183,7 @@ const Dashboard = () => {
               />
             )}
 
-            {activeTab === 'keys' && <KeysTab />}
+            {activeTab === 'keys' && <KeysTab workspaces={workspaces} />}
 
             {activeTab === 'shared' && activeWorkspace && (
               <SharedLinksTab workspaceId={activeWorkspace.id} isAdmin={isAdmin} />

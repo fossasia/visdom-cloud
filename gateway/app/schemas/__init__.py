@@ -11,8 +11,8 @@ and API key provisioning. Standardizes the fields for API validation using UUID 
 
 import datetime
 import uuid
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import List, Literal, Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 # --- USER SCHEMAS ---
@@ -63,8 +63,27 @@ class TokenPayload(BaseModel):
 
 
 # --- API KEY SCHEMAS ---
+class APIKeyWorkspaceSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class APIKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    scope: Literal["org", "workspace"] = "org"
+    workspace_ids: List[uuid.UUID] = Field(default_factory=list)
+    expires_at: Optional[datetime.datetime] = None
+
+    @model_validator(mode="after")
+    def _validate_scope(self):
+        if self.scope == "workspace" and not self.workspace_ids:
+            raise ValueError("Select at least one workspace, or choose the org-wide scope.")
+        if self.scope == "org" and self.workspace_ids:
+            raise ValueError("workspace_ids is only valid when scope is 'workspace'.")
+        return self
 
 
 class APIKeyResponse(BaseModel):
@@ -72,8 +91,11 @@ class APIKeyResponse(BaseModel):
     name: str
     prefix: str
     is_active: bool
+    scope: str
+    workspaces: List[APIKeyWorkspaceSummary] = Field(default_factory=list)
     created_at: datetime.datetime
     last_used_at: Optional[datetime.datetime] = None
+    expires_at: Optional[datetime.datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

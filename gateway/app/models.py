@@ -47,12 +47,22 @@ class APIKey(Base):
     prefix = Column(String, nullable=False)  # e.g., "visdom_live"
     hashed_key = Column(String, unique=True, index=True, nullable=False)  # SHA-256 hash
     is_active = Column(Boolean, default=True)
+    scope = Column(String, nullable=False, default="org")
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     owner = relationship("User", back_populates="api_keys")
+    workspaces = relationship("Workspace", secondary="api_key_workspaces")
+
+
+class APIKeyWorkspace(Base):
+    __tablename__ = "api_key_workspaces"
+
+    api_key_id = Column(UUID(as_uuid=True), ForeignKey("api_keys.id", ondelete="CASCADE"), primary_key=True)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
 
 
 class Workspace(Base):
@@ -75,10 +85,25 @@ class Membership(Base):
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), primary_key=True)
     role = Column(String, default="member")  # admin, member, viewer
     starred = Column(Boolean, default=False)
+    status = Column(String, nullable=False, default="active")
 
     # Relationships
     user = relationship("User", back_populates="memberships")
     workspace = relationship("Workspace", back_populates="memberships")
+
+
+class WorkspaceInvite(Base):
+    __tablename__ = "workspace_invites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    email = Column(String, nullable=False, index=True)
+    role = Column(String, default="member")
+    invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+    # Relationships
+    workspace = relationship("Workspace")
 
 
 class SharedLink(Base):
@@ -89,6 +114,7 @@ class SharedLink(Base):
     role = Column(String, default="member")  # role granted to whoever joins via this link
     expires_at = Column(DateTime(timezone=True), nullable=True)
     password_hash = Column(String, nullable=True)  # Optional link password protection
+    invite_email = Column(String, nullable=True)
 
     # Relationships
     workspace = relationship("Workspace", back_populates="shared_links")
