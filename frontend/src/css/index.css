@@ -265,6 +265,24 @@ body {
   white-space: nowrap;
 }
 
+.gc-sidebar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: var(--vc-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  padding: 6px;
+}
+
+.gc-sidebar-user-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--vc-text-on-navy);
+}
+
 .gc-main {
   flex: 1;
   padding: 28px 32px 48px;
