@@ -1,0 +1,288 @@
+/* Copyright 2017-present, The Visdom Authors */
+
+.gc-sidebar-user-email {
+  font-weight: 600;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-w-full {
+  width: 100%;
+}
+
+.gc-mt-1 {
+  margin-top: 4px;
+}
+
+.gc-text-danger {
+  color: var(--vc-danger);
+}
+
+.gc-warning-box {
+  display: flex;
+  gap: 10px;
+  background: rgba(217, 83, 79, 0.08);
+  border: 1px solid var(--vc-danger);
+  border-radius: var(--vc-radius-sm);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.gc-warning-icon {
+  color: var(--vc-danger);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.gc-warning-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--vc-text);
+  line-height: 1.5;
+}
+
+.gc-flex-row-end {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.gc-flex-grow-140 {
+  flex: 1 1 140px;
+}
+
+.gc-flex-grow-180 {
+  flex: 1 1 180px;
+}
+
+.gc-h-34 {
+  height: 34px;
+}
+
+.gc-min-w-0 {
+  min-width: 0;
+}
+
+.gc-font-mono-small {
+  font-family: monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.gc-actions-row {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.gc-flex-row-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gc-select-compact {
+  width: auto;
+  height: 28px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.gc-btn-icon-compact {
+  height: 28px;
+}
+
+.gc-flex-col-gap-lg {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.gc-flex-row-gap-md {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.gc-flex-1 {
+  flex: 1;
+}
+
+.gc-whitespace-nowrap {
+  white-space: nowrap;
+}
+
+.gc-success-box-column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.gc-flex-row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gc-font-semibold {
+  font-weight: 600;
+}
+
+.gc-btn-unstyled-flex {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+}
+
+.gc-text-desc-muted {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.gc-raw-key-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #212529;
+  padding: 8px 12px;
+  border-radius: var(--vc-radius-sm);
+  font-family: monospace;
+  font-size: 13px;
+  color: #ffffff;
+  word-break: break-all;
+}
+
+.gc-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.gc-mb-1 {
+  margin-bottom: 4px;
+}
+
+.gc-settings-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vc-text);
+}
+
+.gc-settings-id {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--vc-text-muted);
+  word-break: break-all;
+}
+
+.gc-border-section-t {
+  border-top: 1px solid var(--vc-border);
+  padding-top: 16px;
+}
+
+.gc-mb-lg {
+  margin-bottom: 16px;
+}
+
+.gc-section-title-compact {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.gc-ml-auto {
+  margin-left: auto;
+}
+
+.gc-shrink-0 {
+  flex-shrink: 0;
+}
+
+.gc-text-success {
+  color: var(--vc-success);
+}
+
+.gc-text-center {
+  text-align: center;
+}
+
+.gc-absolute-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--vc-text-muted);
+}
+
+.gc-input-pl-search {
+  padding-left: 32px;
+}
+
+.gc-tabs-header-border {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--vc-border);
+}
+
+.gc-tab-link-select {
+  background: transparent;
+  border: none;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 10px;
+  cursor: pointer;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--vc-text-muted);
+}
+
+.gc-tab-link-select.active {
+  border-bottom: 2px solid var(--vc-blue);
+  color: var(--vc-blue);
+}
+
+.gc-border-none {
+  border: none;
+}
+
+.gc-flex-row-gap-sm-min-w {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.gc-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gc-font-mono {
+  font-family: monospace;
+}
+
+.gc-text-star-inactive {
+  display: flex;
+  cursor: pointer;
+  color: var(--vc-text-muted);
+}
+
+.gc-text-star-active {
+  display: flex;
+  cursor: pointer;
+  color: #f59e0b;
+}
+
+.gc-text-blue {
+  color: var(--vc-blue);
+}

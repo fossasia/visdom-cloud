@@ -16,21 +16,38 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # --- USER SCHEMAS ---
+USERNAME_PATTERN = r"^[a-z0-9_-]{3,30}$"
+
+
 class UserBase(BaseModel):
     email: EmailStr = Field(..., max_length=100)
 
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=100)
+    username: Optional[str] = Field(default=None, pattern=USERNAME_PATTERN)
 
 
 class UserResponse(UserBase):
     id: uuid.UUID
+    username: str
     tier: str
     is_active: bool
     created_at: datetime.datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UsernameUpdate(BaseModel):
+    username: str = Field(..., pattern=USERNAME_PATTERN)
+
+
+class UsernameAvailabilityResponse(BaseModel):
+    available: bool
+
+
+class GeneratedUsernameResponse(BaseModel):
+    username: str
 
 
 # --- TOKEN SCHEMAS ---

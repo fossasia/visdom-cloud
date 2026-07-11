@@ -63,12 +63,6 @@ body {
   text-decoration: none;
 }
 
-.visdom-logo span {
-  font-weight: 300;
-  color: var(--text-muted);
-  margin-left: 4px;
-}
-
 /* Flat Toolbars / Panels */
 .visdom-panel {
   background: var(--panel-bg);
@@ -186,7 +180,7 @@ body {
 
 /* ============================================================
    Milestone 2: Workspace Console
-   A left-sidebar admin console themed as a Visdom Cloud extension:
+   A left-sidebar admin console themed as a Visdom extension:
    Visdom's classic navy (#3b5998) for the sidebar/brand chrome,
    blended with the flat, Open-Sans, small-radius card language of
    FOSSASIA's eventyay/pretalx product family (accent blue #2185d0).
@@ -243,12 +237,6 @@ body {
   color: #ffffff;
   text-decoration: none;
   padding: 0 6px;
-}
-
-.gc-logo span {
-  font-weight: 300;
-  color: var(--vc-text-on-navy-muted);
-  margin-left: 4px;
 }
 
 .gc-sidebar-nav {
@@ -565,6 +553,37 @@ body {
   max-width: 420px;
   padding: 24px;
 }
+
+.gc-modal-wide {
+  max-width: 520px;
+}
+
+.gc-ws-select-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-sm);
+}
+
+.gc-ws-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--vc-border);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--vc-text);
+}
+
+.gc-ws-select-row:last-child { border-bottom: none; }
+.gc-ws-select-row:hover { background: var(--vc-bg); }
+.gc-ws-select-row.active { background: rgba(33, 133, 208, 0.08); }
 
 .gc-modal-header {
   display: flex;

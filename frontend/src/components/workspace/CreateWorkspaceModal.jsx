@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { parseApiError } from '../../utils/helpers';
+import ModalPortal from '../ModalPortal';
 
 const slugify = (value) =>
   value
@@ -40,62 +42,58 @@ const CreateWorkspaceModal = ({ onClose, onCreated }) => {
       const response = await api.post('/workspaces', { name: name.trim(), slug: slug.trim() });
       onCreated(response.data);
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to create workspace.');
+      setError(parseApiError(err, 'Failed to create workspace.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="gc-modal-overlay" onClick={onClose}>
-      <div className="gc-panel gc-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="gc-modal-header">
-          <span className="gc-modal-title">Create Workspace</span>
-          <button className="gc-modal-close" onClick={onClose} type="button">
-            <X size={16} />
-          </button>
+    <ModalPortal onClose={onClose}>
+      <div className="gc-modal-header">
+        <span className="gc-modal-title">Create Workspace</span>
+        <button className="gc-modal-close" onClick={onClose} type="button">
+          <X size={16} />
+        </button>
+      </div>
+
+      {error && <div className="gc-form-error">{error}</div>}
+
+      <form onSubmit={handleSubmit}>
+        <div className="gc-field">
+          <label className="gc-label">Workspace Name</label>
+          <input
+            type="text"
+            required
+            autoFocus
+            className="gc-input"
+            placeholder="NLP Labs"
+            value={name}
+            onChange={handleNameChange}
+          />
         </div>
 
-        {error && <div className="gc-form-error">{error}</div>}
+        <div className="gc-field">
+          <label className="gc-label">Slug</label>
+          <input
+            type="text"
+            required
+            className="gc-input"
+            placeholder="nlp-labs"
+            value={slug}
+            onChange={handleSlugChange}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="gc-field">
-            <label className="gc-label">Workspace Name</label>
-            <input
-              type="text"
-              required
-              autoFocus
-              className="gc-input"
-              placeholder="NLP Labs"
-              value={name}
-              onChange={handleNameChange}
-            />
-          </div>
-
-          <div className="gc-field">
-            <label className="gc-label">Slug</label>
-            <input
-              type="text"
-              required
-              className="gc-input"
-              placeholder="nlp-labs"
-              value={slug}
-              onChange={handleSlugChange}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="gc-btn gc-btn-primary"
-            style={{ width: '100%', marginTop: '4px' }}
-          >
-            {submitting ? 'Creating...' : 'Create Workspace'}
-          </button>
-        </form>
-      </div>
-    </div>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="gc-btn gc-btn-primary gc-w-full gc-mt-1"
+        >
+          {submitting ? 'Creating...' : 'Create Workspace'}
+        </button>
+      </form>
+    </ModalPortal>
   );
 };
 

@@ -103,8 +103,8 @@ export const AuthProvider = ({ children }) => {
     return userResponse.data;
   };
 
-  const register = async (email, password) => {
-    const response = await axios.post('/api/v1/auth/register', { email, password });
+  const register = async (email, password, username) => {
+    const response = await axios.post('/api/v1/auth/register', { email, password, username: username || undefined });
     return response.data;
   };
 
@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, accessToken, loading, login, register, logout, setUser }}>
       {children}
     </AuthContext.Provider>
   );

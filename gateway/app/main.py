@@ -10,8 +10,8 @@ from app.routers import auth, api_keys, health, workspaces
 # Create db tables on startup
 Base.metadata.create_all(bind=engine)
 app = FastAPI(
-    title="Visdom Cloud Gateway",
-    description="Microservice authentication sidecar for Visdom Cloud",
+    title="Visdom Gateway",
+    description="Microservice authentication sidecar for Visdom",
     version="1.0.0"
 )
 

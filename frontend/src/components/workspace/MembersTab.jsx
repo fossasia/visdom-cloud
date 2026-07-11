@@ -3,12 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Crown, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import InviteMemberModal from './InviteMemberModal';
-
-const ROLE_BADGE = {
-  admin: 'gc-badge-admin',
-  member: 'gc-badge-member',
-  viewer: 'gc-badge-viewer',
-};
+import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
 
 const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
   const [members, setMembers] = useState([]);
@@ -43,8 +38,7 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
       const response = await api.put(`/workspaces/${workspaceId}/members/${userId}`, { role });
       setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to update role.');
+      setError(parseApiError(err, 'Failed to update role.'));
     }
   };
 
@@ -56,8 +50,7 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
       await api.delete(`/workspaces/${workspaceId}/members/${userId}`);
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Failed to remove member.');
+      setError(parseApiError(err, 'Failed to remove member.'));
     }
   };
 
@@ -87,7 +80,7 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
           {members.map((m) => {
             const isSelf = m.user_id === currentUserId;
             const isOwner = m.user_id === ownerId;
-            const canRemove = isAdmin && !isSelf && !isOwner;
+            const canManage = isAdmin && !isSelf && !isOwner;
             return (
               <div key={m.user_id} className="gc-row">
                 <div>
@@ -103,11 +96,10 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                   </div>
                 </div>
 
-                {isAdmin && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {canManage && (
+                  <div className="gc-flex-row-center">
                     <select
-                      className="gc-select"
-                      style={{ width: 'auto', height: '28px' }}
+                      className="gc-select gc-select-compact"
                       value={m.role}
                       onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
                     >
@@ -115,17 +107,14 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                       <option value="member">Member</option>
                       <option value="viewer">Viewer</option>
                     </select>
-                    {canRemove && (
-                      <button
-                        className="gc-btn gc-btn-danger gc-btn-icon"
-                        style={{ height: '28px' }}
-                        onClick={() => handleRemove(m.user_id)}
-                        title="Remove member"
-                        type="button"
-                      >
-                        <X size={13} />
-                      </button>
-                    )}
+                    <button
+                      className="gc-btn gc-btn-danger gc-btn-icon gc-btn-icon-compact"
+                      onClick={() => handleRemove(m.user_id)}
+                      title="Remove member"
+                      type="button"
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
                 )}
               </div>

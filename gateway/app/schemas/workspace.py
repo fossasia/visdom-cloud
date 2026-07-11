@@ -32,6 +32,17 @@ class WorkspaceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MyWorkspaceResponse(WorkspaceResponse):
+    """A workspace as seen in the current user's own workspace list — includes
+    their membership-specific role and starred flag alongside the workspace."""
+    role: str
+    starred: bool
+
+
+class StarredUpdate(BaseModel):
+    starred: bool
+
+
 # --- MEMBERSHIP SCHEMAS ---
 class MemberInvite(BaseModel):
     email: EmailStr = Field(..., max_length=100)

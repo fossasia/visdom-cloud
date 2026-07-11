@@ -18,14 +18,24 @@ const TABS = [
 ];
 
 const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
+const TAB_IDS = new Set(TABS.map((tab) => tab.id));
+const ACTIVE_TAB_STORAGE_KEY = 'visdom-dashboard-active-tab';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [workspaces, setWorkspaces] = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [activeTab, setActiveTab] = useState('workspaces');
+  const [activeTab, setActiveTab] = useState(() => {
+    const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
+  });
+
+  const isAdmin = activeWorkspace?.role === 'admin';
+
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const fetchWorkspaces = useCallback(async () => {
     setWorkspacesLoading(true);
@@ -33,11 +43,13 @@ const Dashboard = () => {
       const response = await api.get('/workspaces');
       setWorkspaces(response.data);
       setActiveWorkspace((prev) => {
-        if (prev && response.data.some((ws) => ws.id === prev.id)) return prev;
+        if (prev) {
+          return response.data.find((ws) => ws.id === prev.id) || null;
+        }
         return response.data[0] || null;
       });
     } catch (err) {
-      console.error('Error fetching workspaces', err);
+      console.error(err);
     } finally {
       setWorkspacesLoading(false);
     }
@@ -47,45 +59,22 @@ const Dashboard = () => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Determine whether the current user is an admin of the active workspace,
-  // to gate admin-only actions across tabs.
-  useEffect(() => {
-    if (!activeWorkspace || !user) {
-      setIsAdmin(false);
-      return;
-    }
-
-    let cancelled = false;
-    api
-      .get(`/workspaces/${activeWorkspace.id}/members`)
-      .then((response) => {
-        if (cancelled) return;
-        const self = response.data.find((m) => m.user_id === user.id);
-        setIsAdmin(self?.role === 'admin');
-      })
-      .catch(() => {
-        if (!cancelled) setIsAdmin(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeWorkspace, user]);
-
   const handleWorkspaceCreated = (workspace) => {
     setWorkspaces((prev) => [...prev, workspace]);
     setActiveWorkspace(workspace);
     setActiveTab('workspaces');
   };
 
-  // Shared by "delete workspace" (admin) and "leave workspace" (any member) —
-  // both mean this workspace should disappear from my own list right away.
+  const handleWorkspaceUpdated = (workspace) => {
+    setWorkspaces((prev) =>
+      prev.map((ws) => (ws.id === workspace.id ? workspace : ws))
+    );
+    setActiveWorkspace((prev) => (prev?.id === workspace.id ? workspace : prev));
+  };
+
   const handleWorkspaceRemoved = (workspaceId) => {
-    setWorkspaces((prev) => {
-      const remaining = prev.filter((ws) => ws.id !== workspaceId);
-      setActiveWorkspace(remaining[0] || null);
-      return remaining;
-    });
+    setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
+    setActiveWorkspace((prev) => (prev?.id === workspaceId ? null : prev));
     setActiveTab('workspaces');
   };
 
@@ -95,7 +84,7 @@ const Dashboard = () => {
     <div className="gc-shell">
       <aside className="gc-sidebar">
         <a href="/" className="gc-logo">
-          visdom<span>cloud</span>
+          visdom
         </a>
 
         {!workspacesLoading && (
@@ -104,6 +93,7 @@ const Dashboard = () => {
             activeWorkspace={activeWorkspace}
             onSwitch={setActiveWorkspace}
             onCreated={handleWorkspaceCreated}
+            onWorkspaceUpdated={handleWorkspaceUpdated}
           />
         )}
 
@@ -125,7 +115,9 @@ const Dashboard = () => {
         </nav>
 
         <div className="gc-sidebar-footer">
-          <div className="gc-sidebar-user">{user?.email}</div>
+          <div className="gc-sidebar-user gc-truncate">
+            <div className="gc-sidebar-user-email">{user?.email}</div>
+          </div>
           <button onClick={logout} className="gc-btn" type="button">
             <LogOut size={13} />
             Logout
@@ -137,7 +129,9 @@ const Dashboard = () => {
         {needsWorkspace ? (
           <section className="gc-panel">
             <div className="gc-empty">
-              You don't have a workspace yet. Use "Add Workspace" in the sidebar to create your first one.
+              {workspaces.length === 0
+                ? 'You don\'t have a workspace yet. Use "Add Workspace" in the sidebar to create your first one.'
+                : 'Select a workspace from the sidebar to get started.'}
             </div>
           </section>
         ) : (
