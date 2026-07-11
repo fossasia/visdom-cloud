@@ -36,13 +36,11 @@ const Register = () => {
     }
   };
 
-  // Suggest a username once on mount.
   useEffect(() => {
     fetchSuggestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live-check custom username availability (debounced).
   useEffect(() => {
     if (usernameMode !== 'custom' || !customUsername) {
       setUsernameAvailable(null);
@@ -70,8 +68,6 @@ const Register = () => {
   }, [customUsername, usernameMode]);
 
   const handleEmailBlur = () => {
-    // Re-suggest using the email's local part once the user has typed one in,
-    // so the auto-generated handle feels tied to them rather than fully random.
     if (usernameMode === 'auto' && email.includes('@')) {
       fetchSuggestion(email.split('@')[0]);
     }

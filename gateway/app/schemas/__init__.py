@@ -25,8 +25,6 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=100)
-    # If omitted, the server generates one. If provided, it must already be
-    # lowercase/valid — the frontend normalizes as the user types.
     username: Optional[str] = Field(default=None, pattern=USERNAME_PATTERN)
 
 

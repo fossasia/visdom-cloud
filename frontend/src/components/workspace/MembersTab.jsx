@@ -80,9 +80,6 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
           {members.map((m) => {
             const isSelf = m.user_id === currentUserId;
             const isOwner = m.user_id === ownerId;
-            // Nobody can change their own role, and nobody but the workspace
-            // owner's own creation locks their role permanently — so the
-            // only rows an admin can manage are other, non-owner members.
             const canManage = isAdmin && !isSelf && !isOwner;
             return (
               <div key={m.user_id} className="gc-row">

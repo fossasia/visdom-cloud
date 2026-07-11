@@ -56,7 +56,7 @@ def _random_candidate(seed: str | None) -> str:
 
 def generate_unique_username(db: Session, seed: str | None = None) -> str:
     """Generates a username guaranteed not to collide with an existing row."""
-    from app.models import User  # local import to avoid a circular import at module load
+    from app.models import User  
 
     for _ in range(20):
         candidate = _random_candidate(seed)
@@ -66,5 +66,4 @@ def generate_unique_username(db: Session, seed: str | None = None) -> str:
         if not exists:
             return candidate
 
-    # Extremely unlikely fallback: guarantee uniqueness with a random token.
     return f"user-{secrets.token_hex(6)}"
