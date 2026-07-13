@@ -67,7 +67,12 @@ def get_current_user(
         raise credentials_exception
         
     # Query database using UUID (explicitly converted for SQLite/compatibility)
-    user = db.query(User).filter(User.id == uuid.UUID(token_data.sub)).first()
+    try:
+        user_id = uuid.UUID(token_data.sub)
+    except (TypeError, ValueError):
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
         

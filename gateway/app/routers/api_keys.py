@@ -32,6 +32,7 @@ def create_api_key(
         unique_ws_ids = list(dict.fromkeys(key_in.workspace_ids))
         memberships = (
             db.query(Membership)
+            .options(joinedload(Membership.workspace))
             .filter(
                 Membership.user_id == current_user.id,
                 Membership.workspace_id.in_(unique_ws_ids),

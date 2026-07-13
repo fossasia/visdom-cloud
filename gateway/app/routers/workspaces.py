@@ -164,6 +164,8 @@ def delete_workspace(
     """Deletes a workspace and its memberships/shared links. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     db.delete(workspace)
     db.commit()
 
@@ -182,6 +184,8 @@ def set_workspace_starred(
     db.refresh(membership)
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     return _to_my_workspace_response(workspace, membership)
 
 
@@ -196,6 +200,8 @@ def invite_member(
     """Invites a collaborator by email, creating a pending invite. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
 
     email_lower = invite.email.strip().lower()
     invitee = db.query(User).filter(User.email == email_lower).first()
@@ -275,6 +281,8 @@ def update_member_role(
         )
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     if workspace.created_by == user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -322,6 +330,8 @@ def remove_member(
             )
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     if workspace.created_by == user_id and not is_self_leave:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -448,6 +458,8 @@ def create_shared_link(
     """Generates a secure public share token for the workspace. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
 
     invite_email = link_in.invite_email.strip().lower() if link_in.invite_email else None
 

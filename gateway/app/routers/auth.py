@@ -194,7 +194,15 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
             detail="Invalid refresh token."
         )
 
-    user = db.query(User).filter(User.id == uuid.UUID(user_id_str)).first()
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token."
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

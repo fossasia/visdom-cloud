@@ -47,7 +47,7 @@ class APIKey(Base):
     prefix = Column(String, nullable=False)  # e.g., "visdom_live"
     hashed_key = Column(String, unique=True, index=True, nullable=False)  # SHA-256 hash
     is_active = Column(Boolean, default=True)
-    scope = Column(String, nullable=False, default="org")
+    scope = Column(String, nullable=False, default="org", server_default="org")
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
@@ -85,7 +85,7 @@ class Membership(Base):
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id"), primary_key=True)
     role = Column(String, default="member")  # admin, member, viewer
     starred = Column(Boolean, default=False)
-    status = Column(String, nullable=False, default="active")
+    status = Column(String, nullable=False, default="active", server_default="active")
 
     # Relationships
     user = relationship("User", back_populates="memberships")
