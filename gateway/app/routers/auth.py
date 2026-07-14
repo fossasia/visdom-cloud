@@ -3,17 +3,20 @@
 Authentication router handling user registration, logins, JWT refresh rotation, and logout sessions.
 """
 
-from app.models import APIKey, utcnow
-import datetime
-import hashlib
+from app.models import APIKey
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, status, Header
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import jwt
 
 from app.config import settings
-from app.dependencies import get_db, get_current_user
+from app.dependencies import (
+    get_db,
+    get_current_user,
+    get_api_key,
+    enforce_api_key_workspace_scope,
+)
 from app.models import Membership, User, WorkspaceInvite
 from app.schemas import (
     GeneratedUsernameResponse,
@@ -240,34 +243,26 @@ def get_user_profile(current_user: User = Depends(get_current_user)):
 
 @router.get("/key-check")
 def check_api_key(
-    x_api_key: str = Header(None, alias="X-API-KEY"),
-    db: Session = Depends(get_db)
+    workspace_id: uuid.UUID | None = None,
+    key_record: APIKey = Depends(get_api_key),
+    db: Session = Depends(get_db),
 ):
-    """Verifies if an API Key is valid and returns the owner details"""
-    if not x_api_key:
-        raise HTTPException(status_code=401, detail="X-API-KEY header is missing.")
+    """
+    Verifies an API key and returns the owner details. If a workspace_id is
+    supplied, additionally enforces the key's workspace-scope binding for that
+    workspace: a workspace-scoped key is rejected (403) for any workspace it is
+    not bound to, and any key is rejected if its owner has lost access there.
+    """
+    response = {
+        "status": "authenticated",
+        "email": key_record.owner.email,
+        "key_name": key_record.name,
+        "scope": key_record.scope,
+    }
 
-    # hash the incoming key to match the db hash
-    hashed_key = hashlib.sha256(x_api_key.encode("utf-8")).hexdigest()
+    if workspace_id is not None:
+        enforce_api_key_workspace_scope(db, key_record, workspace_id)
+        response["workspace_id"] = str(workspace_id)
+        response["workspace_access"] = "granted"
 
-    # query the key in db
-    key_record = (
-        db.query(APIKey)
-        .filter(APIKey.hashed_key == hashed_key, APIKey.is_active.is_(True))
-        .first()
-    )
-    if not key_record:
-        raise HTTPException(status_code=401, detail="Invalid or inactive API key.")
-
-    if key_record.expires_at is not None:
-        expires_at = key_record.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
-        if utcnow() > expires_at:
-            raise HTTPException(status_code=401, detail="API key has expired.")
-
-    # return user detail
-    user = db.query(User).filter(User.id == key_record.user_id).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid API key owner.")
-    return {"status": "authenticated", "email": user.email, "key_name": key_record.name}
+    return response
