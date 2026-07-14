@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useToast } from '../toast/useToast';
 import { parseApiError } from '../../utils/helpers';
 import ModalPortal from '../ModalPortal';
 
@@ -18,6 +19,7 @@ const CreateWorkspaceModal = ({ onClose, onCreated }) => {
   const [slugTouched, setSlugTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   const handleNameChange = (e) => {
     const value = e.target.value;
@@ -40,6 +42,7 @@ const CreateWorkspaceModal = ({ onClose, onCreated }) => {
     setError('');
     try {
       const response = await api.post('/workspaces', { name: name.trim(), slug: slug.trim() });
+      toast.success(`Workspace "${response.data.name}" created.`);
       onCreated(response.data);
     } catch (err) {
       setError(parseApiError(err, 'Failed to create workspace.'));

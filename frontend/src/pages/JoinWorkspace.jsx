@@ -2,10 +2,14 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
+import { useToast } from '../components/toast/useToast';
 
 const JoinWorkspace = () => {
   const { linkId } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
+  const toast = useToast();
   const handled = useRef(false);
 
   useEffect(() => {
@@ -17,11 +21,11 @@ const JoinWorkspace = () => {
         const response = await api.post(`/workspaces/share/${linkId}/join`, { password: password || null });
         const { workspace, role, status } = response.data;
         if (status === 'active') {
-          window.alert(`You're already a member of "${workspace.name}".`);
+          toast.info(`You're already a member of "${workspace.name}".`);
         } else {
-          window.alert(
-            `Your request to join "${workspace.name}" as ${role} has been sent. ` +
-              "An admin needs to approve it before it shows up in your workspaces."
+          toast.success(
+            `Request to join "${workspace.name}" as ${role} sent — an admin needs to approve it before it appears in your workspaces.`,
+            { duration: 6000 }
           );
         }
         navigate('/', { replace: true });
@@ -29,7 +33,14 @@ const JoinWorkspace = () => {
         const detail = err.response?.data?.detail;
 
         if (err.response?.status === 401 && detail === 'This shared link requires a password.') {
-          const password = window.prompt('This shared link is password protected. Enter the password:');
+          const password = await confirm({
+            title: 'Password required',
+            message: 'This shared link is password protected. Enter the password to continue.',
+            input: true,
+            inputType: 'password',
+            inputLabel: 'Password',
+            confirmText: 'Join',
+          });
           if (password) {
             join(password);
           } else {
@@ -38,21 +49,28 @@ const JoinWorkspace = () => {
           return;
         }
 
-        window.alert(typeof detail === 'string' ? detail : 'This shared link is invalid.');
+        toast.error(typeof detail === 'string' ? detail : 'This shared link is invalid.');
         navigate('/', { replace: true });
       }
     };
 
-    const wantsToJoin = window.confirm(
-      "You've been invited to join a workspace via a shared link. Request to join now? " +
-        "An admin will need to approve your request before you get access."
-    );
-    if (wantsToJoin) {
-      join(null);
-    } else {
-      navigate('/', { replace: true });
-    }
-  }, [linkId, navigate]);
+    const run = async () => {
+      const wantsToJoin = await confirm({
+        title: 'Join workspace',
+        message:
+          "You've been invited to join a workspace via a shared link. Request to join now? " +
+          'An admin will need to approve your request before you get access.',
+        confirmText: 'Request to join',
+      });
+      if (wantsToJoin) {
+        join(null);
+      } else {
+        navigate('/', { replace: true });
+      }
+    };
+
+    run();
+  }, [linkId, navigate, confirm, toast]);
 
   return (
     <div className="auth-wrapper">

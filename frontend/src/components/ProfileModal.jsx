@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { api, useAuth } from '../context/AuthContext';
+import { useToast } from './toast/useToast';
 import { parseApiError } from '../utils/helpers';
 import ModalPortal from './ModalPortal';
 
@@ -14,7 +15,7 @@ const ProfileModal = ({ onClose }) => {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const toast = useToast();
 
   const isUnchanged = username === user?.username;
 
@@ -52,11 +53,11 @@ const ProfileModal = ({ onClose }) => {
 
     setSubmitting(true);
     setError('');
-    setSuccess('');
     try {
       const response = await api.patch('/auth/me/username', { username });
       setUser(response.data);
-      setSuccess('Username updated.');
+      toast.success('Username updated.');
+      onClose();
     } catch (err) {
       setError(parseApiError(err, 'Failed to update username.'));
     } finally {
@@ -74,7 +75,6 @@ const ProfileModal = ({ onClose }) => {
       </div>
 
       {error && <div className="gc-form-error">{error}</div>}
-      {success && <div className="gc-form-success">{success}</div>}
 
       <div className="gc-field">
         <label className="gc-label gc-mb-1">Email Address</label>

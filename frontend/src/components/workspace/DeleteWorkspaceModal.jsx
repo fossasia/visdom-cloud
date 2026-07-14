@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useToast } from '../toast/useToast';
 import { parseApiError } from '../../utils/helpers';
 import ModalPortal from '../ModalPortal';
 
@@ -9,6 +10,7 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
   const [confirmText, setConfirmText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   const isMatch = confirmText === workspace.name;
 
@@ -20,6 +22,7 @@ const DeleteWorkspaceModal = ({ workspace, onClose, onDeleted }) => {
     setError('');
     try {
       await api.delete(`/workspaces/${workspace.id}`);
+      toast.success(`Workspace "${workspace.name}" deleted.`);
       onDeleted(workspace.id);
       onClose();
     } catch (err) {

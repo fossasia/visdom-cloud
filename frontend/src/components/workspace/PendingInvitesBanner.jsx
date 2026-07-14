@@ -2,36 +2,45 @@
 import React, { useState } from 'react';
 import { Check, Mail, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../toast/useToast';
 import { parseApiError } from '../../utils/helpers';
 
 const PendingInvitesBanner = ({ invites, currentUserId, onAccepted, onDeclined }) => {
   const [busyId, setBusyId] = useState(null);
-  const [error, setError] = useState('');
+  const confirm = useConfirm();
+  const toast = useToast();
 
   if (!invites || invites.length === 0) return null;
 
-  const handleAccept = async (workspaceId) => {
+  const handleAccept = async (workspaceId, name) => {
     setBusyId(workspaceId);
-    setError('');
     try {
       await api.post(`/workspaces/${workspaceId}/members/me/accept`);
+      toast.success(`Joined "${name}".`);
       onAccepted(workspaceId);
     } catch (err) {
-      setError(parseApiError(err, 'Failed to accept invite.'));
+      toast.error(parseApiError(err, 'Failed to accept invite.'));
     } finally {
       setBusyId(null);
     }
   };
 
-  const handleDecline = async (workspaceId) => {
-    if (!window.confirm('Decline this invitation?')) return;
+  const handleDecline = async (workspaceId, name) => {
+    const ok = await confirm({
+      title: 'Decline invitation',
+      message: `Decline the invitation to join "${name}"?`,
+      confirmText: 'Decline',
+      danger: true,
+    });
+    if (!ok) return;
     setBusyId(workspaceId);
-    setError('');
     try {
       await api.delete(`/workspaces/${workspaceId}/members/${currentUserId}`);
+      toast.info(`Invitation to "${name}" declined.`);
       onDeclined(workspaceId);
     } catch (err) {
-      setError(parseApiError(err, 'Failed to decline invite.'));
+      toast.error(parseApiError(err, 'Failed to decline invite.'));
     } finally {
       setBusyId(null);
     }
@@ -46,8 +55,6 @@ const PendingInvitesBanner = ({ invites, currentUserId, onAccepted, onDeclined }
         </span>
       </div>
 
-      {error && <div className="gc-form-error">{error}</div>}
-
       <div>
         {invites.map((invite) => (
           <div key={invite.workspace.id} className="gc-row">
@@ -61,7 +68,7 @@ const PendingInvitesBanner = ({ invites, currentUserId, onAccepted, onDeclined }
             <div className="gc-flex-row-center">
               <button
                 className="gc-btn gc-btn-primary gc-btn-icon"
-                onClick={() => handleAccept(invite.workspace.id)}
+                onClick={() => handleAccept(invite.workspace.id, invite.workspace.name)}
                 disabled={busyId === invite.workspace.id}
                 title="Accept invite"
                 type="button"
@@ -70,7 +77,7 @@ const PendingInvitesBanner = ({ invites, currentUserId, onAccepted, onDeclined }
               </button>
               <button
                 className="gc-btn gc-btn-danger gc-btn-icon"
-                onClick={() => handleDecline(invite.workspace.id)}
+                onClick={() => handleDecline(invite.workspace.id, invite.workspace.name)}
                 disabled={busyId === invite.workspace.id}
                 title="Decline invite"
                 type="button"

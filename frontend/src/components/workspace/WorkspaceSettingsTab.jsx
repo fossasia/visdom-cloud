@@ -2,28 +2,35 @@
 import React, { useState } from 'react';
 import { Building2, LogOut, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../toast/useToast';
 import DeleteWorkspaceModal from './DeleteWorkspaceModal';
 import { parseApiError } from '../../utils/helpers';
 
 const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, onLeave }) => {
   const [leaving, setLeaving] = useState(false);
-  const [error, setError] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const isOwner = workspace.created_by === currentUserId;
 
   const handleLeave = async () => {
-    if (!window.confirm(`Leave workspace "${workspace.name}"?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Leave workspace',
+      message: `Leave "${workspace.name}"? You'll lose access until you're invited back.`,
+      confirmText: 'Leave',
+      danger: true,
+    });
+    if (!ok) return;
 
     setLeaving(true);
-    setError('');
     try {
       await api.delete(`/workspaces/${workspace.id}/members/${currentUserId}`);
+      toast.success(`You left "${workspace.name}".`);
       onLeave(workspace.id);
     } catch (err) {
-      setError(parseApiError(err, 'Failed to leave workspace.'));
+      toast.error(parseApiError(err, 'Failed to leave workspace.'));
       setLeaving(false);
     }
   };
@@ -53,8 +60,6 @@ const WorkspaceSettingsTab = ({ workspace, isAdmin, currentUserId, onDeleted, on
           </div>
         </div>
       </div>
-
-      {error && <div className="gc-form-error">{error}</div>}
 
       <div className={`gc-border-section-t ${isAdmin ? 'gc-mb-lg' : 'mb-0'}`}>
         <div className="gc-panel-title gc-section-title-compact">
