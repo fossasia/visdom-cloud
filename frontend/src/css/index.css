@@ -265,6 +265,24 @@ body {
   white-space: nowrap;
 }
 
+.gc-sidebar-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: var(--vc-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  padding: 6px;
+}
+
+.gc-sidebar-user-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--vc-text-on-navy);
+}
+
 .gc-main {
   flex: 1;
   padding: 28px 32px 48px;
@@ -612,9 +630,10 @@ body {
   background: rgba(217, 83, 79, 0.1);
   border: 1px solid var(--vc-danger);
   color: var(--vc-danger);
-  padding: 8px 12px;
+  padding: 12px 16px;
   font-size: 13px;
   border-radius: var(--vc-radius-sm);
+  margin-top: 16px;
   margin-bottom: 14px;
 }
 
@@ -622,9 +641,10 @@ body {
   background: rgba(40, 167, 69, 0.1);
   border: 1px solid var(--vc-success);
   color: #1e7e34;
-  padding: 8px 12px;
+  padding: 14px 16px;
   font-size: 13px;
   border-radius: var(--vc-radius-sm);
+  margin-top: 16px;
   margin-bottom: 14px;
   display: flex;
   align-items: center;

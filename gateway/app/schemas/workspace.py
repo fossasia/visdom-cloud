@@ -49,12 +49,22 @@ class MemberInvite(BaseModel):
     role: RoleLiteral
 
 
+MembershipStatus = Literal["active", "pending_approval", "pending_acceptance"]
+
+
 class MemberResponse(BaseModel):
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID] = None
+    invite_id: Optional[uuid.UUID] = None
     email: EmailStr
     role: str
+    status: MembershipStatus = "active"
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PendingInviteResponse(BaseModel):
+    workspace: WorkspaceResponse
+    role: str
 
 
 class MemberRoleUpdate(BaseModel):
@@ -66,6 +76,7 @@ class SharedLinkCreate(BaseModel):
     role: RoleLiteral = "member"
     expires_at: Optional[datetime.datetime] = None
     password: Optional[str] = Field(default=None, min_length=4, max_length=100)
+    invite_email: Optional[EmailStr] = None
 
 
 class SharedLinkResponse(BaseModel):
@@ -74,6 +85,7 @@ class SharedLinkResponse(BaseModel):
     role: str
     expires_at: Optional[datetime.datetime] = None
     has_password: bool
+    invite_email: Optional[EmailStr] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,4 +97,4 @@ class SharedLinkJoinRequest(BaseModel):
 class SharedLinkJoinResponse(BaseModel):
     workspace: WorkspaceResponse
     role: str
-    already_member: bool
+    status: MembershipStatus

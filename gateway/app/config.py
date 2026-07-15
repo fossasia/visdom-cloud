@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     API_KEY_PREFIX: str = "visdom_live"
     PORT: int = 8085
+    FRONTEND_URL: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(env_file=".env")
 

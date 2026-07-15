@@ -3,8 +3,10 @@
 Authentication router handling user registration, logins, JWT refresh rotation, and logout sessions.
 """
 
-from app.models import APIKey
+from app.models import APIKey, utcnow
+import datetime
 import hashlib
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, status, Header
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -12,7 +14,7 @@ import jwt
 
 from app.config import settings
 from app.dependencies import get_db, get_current_user
-from app.models import User
+from app.models import Membership, User, WorkspaceInvite
 from app.schemas import (
     GeneratedUsernameResponse,
     Token,
@@ -39,12 +41,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    """Registers a new user by checking for duplicate emails and hashing the password."""
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    email = user_in.email.strip().lower()
+    existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this email already exists."
+            detail="Email already registered."
         )
 
     if user_in.username:
@@ -55,14 +57,29 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
                 detail="This username is already taken.",
             )
     else:
-        username = generate_unique_username(db, seed=user_in.email.split("@")[0])
+        username = generate_unique_username(db, seed=email.split("@")[0])
 
     hashed_pwd = get_password_hash(user_in.password)
-    new_user = User(email=user_in.email, username=username, password_hash=hashed_pwd)
+    new_user = User(email=email, username=username, password_hash=hashed_pwd)
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+
+    pending_invites = db.query(WorkspaceInvite).filter(WorkspaceInvite.email == new_user.email).all()
+    for invite in pending_invites:
+        db.add(
+            Membership(
+                user_id=new_user.id,
+                workspace_id=invite.workspace_id,
+                role=invite.role,
+                status="pending_acceptance",
+            )
+        )
+        db.delete(invite)
+    if pending_invites:
+        db.commit()
+
     return new_user
 
 
@@ -118,7 +135,7 @@ def login(
     Validates user credentials (mapping username to email in form data).
     Returns an access token in the JSON body and sets the refresh token in an HTTP-only cookie.
     """
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = db.query(User).filter(User.email == form_data.username.strip().lower()).first()
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -177,7 +194,15 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
             detail="Invalid refresh token."
         )
 
-    user = db.query(User).filter(User.id == user_id_str).first()
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token."
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -234,6 +259,12 @@ def check_api_key(
     if not key_record:
         raise HTTPException(status_code=401, detail="Invalid or inactive API key.")
 
+    if key_record.expires_at is not None:
+        expires_at = key_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        if utcnow() > expires_at:
+            raise HTTPException(status_code=401, detail="API key has expired.")
 
     # return user detail
     user = db.query(User).filter(User.id == key_record.user_id).first()

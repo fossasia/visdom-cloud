@@ -2,26 +2,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Link2, Lock, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
-import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
-
-const EXPIRY_PRESETS = [
-  { value: 'none', label: 'No expiration' },
-  { value: '7', label: '7 days' },
-  { value: '30', label: '30 days' },
-  { value: '60', label: '60 days' },
-  { value: '90', label: '90 days' },
-  { value: 'custom', label: 'Custom...' },
-];
-
-const resolveExpiresAt = (preset, customValue) => {
-  if (preset === 'none') return null;
-  if (preset === 'custom') {
-    return customValue ? new Date(customValue).toISOString() : null;
-  }
-  const date = new Date();
-  date.setDate(date.getDate() + parseInt(preset, 10));
-  return date.toISOString();
-};
+import { EXPIRY_PRESETS, ROLE_BADGE, parseApiError, resolveExpiresAt } from '../../utils/helpers';
 
 const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   const [links, setLinks] = useState([]);
@@ -30,6 +11,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   const [expiryPreset, setExpiryPreset] = useState('none');
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState(null);
@@ -59,12 +41,14 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
         role,
         expires_at: resolveExpiresAt(expiryPreset, customExpiresAt),
         password: password.trim() || null,
+        invite_email: inviteEmail.trim() || null,
       });
       setLinks((prev) => [...prev, response.data]);
       setRole('member');
       setExpiryPreset('none');
       setCustomExpiresAt('');
       setPassword('');
+      setInviteEmail('');
     } catch (err) {
       setError(parseApiError(err, 'Failed to generate share link.'));
     } finally {
@@ -99,8 +83,9 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       </div>
 
       <p className="gc-panel-sub">
-        Generate a link so people outside your workspace can join it. Anyone who opens the link and confirms will be
-        added as a member with the role you choose below.
+        Generate a link so people outside your workspace can request to join it. Opening the link sends a join
+        request at the role you choose below — an admin still needs to approve it from the Members tab before
+        access is granted.
       </p>
 
       {isAdmin && (
@@ -147,10 +132,26 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          <div className="gc-flex-grow-180">
+            <label className="gc-label">Email this link to (optional)</label>
+            <input
+              type="email"
+              className="gc-input"
+              placeholder="person@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+            />
+          </div>
           <button type="submit" disabled={submitting} className="gc-btn gc-btn-primary gc-h-34">
             {submitting ? 'Generating...' : 'Generate Link'}
           </button>
         </form>
+      )}
+
+      {isAdmin && (
+        <div className="gc-text-desc-muted gc-mt-sm">
+          Note: email delivery isn't wired up to a provider yet — for now, copy the link below and send it yourself.
+        </div>
       )}
 
       {error && <div className="gc-form-error">{error}</div>}
@@ -176,6 +177,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
                       Protected
                     </span>
                   )}
+                  {link.invite_email && <span>Sent to: {link.invite_email}</span>}
                 </div>
               </div>
 

@@ -1,13 +1,15 @@
 /* Copyright 2017-present, The Visdom Authors */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth, api } from '../context/AuthContext';
-import { Building2, CreditCard, Key, Link2, LogOut, Users } from 'lucide-react';
+import { Building2, CreditCard, Key, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
 import WorkspaceSettingsTab from '../components/workspace/WorkspaceSettingsTab';
 import MembersTab from '../components/workspace/MembersTab';
 import SharedLinksTab from '../components/workspace/SharedLinksTab';
 import KeysTab from '../components/workspace/KeysTab';
 import BillingTab from '../components/workspace/BillingTab';
+import PendingInvitesBanner from '../components/workspace/PendingInvitesBanner';
+import ProfileModal from '../components/ProfileModal';
 
 const TABS = [
   { id: 'workspaces', label: 'Workspaces', icon: Building2 },
@@ -26,6 +28,8 @@ const Dashboard = () => {
   const [workspaces, setWorkspaces] = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState([]);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
@@ -55,9 +59,28 @@ const Dashboard = () => {
     }
   }, []);
 
+  const fetchPendingInvites = useCallback(async () => {
+    try {
+      const response = await api.get('/workspaces/invites/pending');
+      setPendingInvites(response.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchWorkspaces();
-  }, [fetchWorkspaces]);
+    fetchPendingInvites();
+  }, [fetchWorkspaces, fetchPendingInvites]);
+
+  const handleInviteAccepted = (workspaceId) => {
+    setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
+    fetchWorkspaces();
+  };
+
+  const handleInviteDeclined = (workspaceId) => {
+    setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
+  };
 
   const handleWorkspaceCreated = (workspace) => {
     setWorkspaces((prev) => [...prev, workspace]);
@@ -115,9 +138,15 @@ const Dashboard = () => {
         </nav>
 
         <div className="gc-sidebar-footer">
-          <div className="gc-sidebar-user gc-truncate">
-            <div className="gc-sidebar-user-email">{user?.email}</div>
-          </div>
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="gc-sidebar-user gc-truncate gc-sidebar-user-btn"
+            type="button"
+            title="Edit profile"
+          >
+            <User size={13} />
+            <span className="gc-sidebar-user-email">{user?.username || user?.email}</span>
+          </button>
           <button onClick={logout} className="gc-btn" type="button">
             <LogOut size={13} />
             Logout
@@ -125,7 +154,16 @@ const Dashboard = () => {
         </div>
       </aside>
 
+      {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
+
       <main className="gc-main">
+        <PendingInvitesBanner
+          invites={pendingInvites}
+          currentUserId={user?.id}
+          onAccepted={handleInviteAccepted}
+          onDeclined={handleInviteDeclined}
+        />
+
         {needsWorkspace ? (
           <section className="gc-panel">
             <div className="gc-empty">
@@ -155,7 +193,7 @@ const Dashboard = () => {
               />
             )}
 
-            {activeTab === 'keys' && <KeysTab />}
+            {activeTab === 'keys' && <KeysTab workspaces={workspaces} />}
 
             {activeTab === 'shared' && activeWorkspace && (
               <SharedLinksTab workspaceId={activeWorkspace.id} isAdmin={isAdmin} />

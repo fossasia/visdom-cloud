@@ -16,13 +16,16 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.dependencies import get_db, get_current_user
-from app.models import Membership, SharedLink, User, Workspace, utcnow
+from app.email import build_share_link_url, send_workspace_invite_email
+from app.models import Membership, SharedLink, User, Workspace, WorkspaceInvite, utcnow
 from app.schemas.workspace import (
     MemberInvite,
     MemberResponse,
     MemberRoleUpdate,
     MyWorkspaceResponse,
+    PendingInviteResponse,
     SharedLinkCreate,
     SharedLinkJoinRequest,
     SharedLinkJoinResponse,
@@ -44,9 +47,9 @@ def _get_membership(db: Session, workspace_id: uuid.UUID, user_id: uuid.UUID) ->
 
 
 def _require_member(db: Session, workspace_id: uuid.UUID, user_id: uuid.UUID) -> Membership:
-    """Ensures the user belongs to the workspace, else 404 (hides existence from non-members)."""
+    """Ensures the user is an active member of the workspace, else 404."""
     membership = _get_membership(db, workspace_id, user_id)
-    if not membership:
+    if not membership or membership.status != "active":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     return membership
 
@@ -62,7 +65,30 @@ def _require_admin(db: Session, workspace_id: uuid.UUID, user_id: uuid.UUID) -> 
 
 
 def _to_member_response(membership: Membership) -> MemberResponse:
-    return MemberResponse(user_id=membership.user_id, email=membership.user.email, role=membership.role)
+    return MemberResponse(
+        user_id=membership.user_id,
+        email=membership.user.email,
+        role=membership.role,
+        status=membership.status,
+    )
+
+
+def _invite_to_member_response(invite: WorkspaceInvite) -> MemberResponse:
+    return MemberResponse(
+        invite_id=invite.id,
+        email=invite.email,
+        role=invite.role,
+        status="pending_acceptance",
+    )
+
+
+def _dispatch_invite_email(to_email: str, workspace_name: str, invite_url: str) -> None:
+    # TODO: hook up a real email provider to actually deliver this.
+    send_workspace_invite_email(
+        to_email=to_email.strip().lower(),
+        workspace_name=workspace_name,
+        invite_url=invite_url
+    )
 
 
 def _to_my_workspace_response(workspace: Workspace, membership: Membership) -> MyWorkspaceResponse:
@@ -83,6 +109,7 @@ def _to_shared_link_response(link: SharedLink) -> SharedLinkResponse:
         role=link.role,
         expires_at=link.expires_at,
         has_password=bool(link.password_hash),
+        invite_email=link.invite_email,
     )
 
 
@@ -118,11 +145,11 @@ def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lists all workspaces the current user belongs to, with their role and starred flag."""
+    """Lists all workspaces the current user is an active member of."""
     rows = (
         db.query(Workspace, Membership)
         .join(Membership, Membership.workspace_id == Workspace.id)
-        .filter(Membership.user_id == current_user.id)
+        .filter(Membership.user_id == current_user.id, Membership.status == "active")
         .all()
     )
     return [_to_my_workspace_response(ws, membership) for ws, membership in rows]
@@ -137,6 +164,8 @@ def delete_workspace(
     """Deletes a workspace and its memberships/shared links. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     db.delete(workspace)
     db.commit()
 
@@ -155,6 +184,8 @@ def set_workspace_starred(
     db.refresh(membership)
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     return _to_my_workspace_response(workspace, membership)
 
 
@@ -166,27 +197,53 @@ def invite_member(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Adds a collaborator to the workspace by looking up their account by email. Admins only."""
+    """Invites a collaborator by email, creating a pending invite. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
 
-    invitee = db.query(User).filter(User.email.ilike(invite.email)).first()
-    if not invitee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No user found with this email address.",
+    email_lower = invite.email.strip().lower()
+    invitee = db.query(User).filter(User.email == email_lower).first()
+
+    if invitee:
+        if _get_membership(db, workspace_id, invitee.id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already a member of, or already has a pending invite to, this workspace.",
+            )
+        membership = Membership(
+            user_id=invitee.id, workspace_id=workspace_id, role=invite.role, status="pending_acceptance"
         )
+        db.add(membership)
+        db.commit()
+        db.refresh(membership)
+        _dispatch_invite_email(
+            to_email=email_lower, workspace_name=workspace.name, invite_url=settings.FRONTEND_URL
+        )
+        return _to_member_response(membership)
 
-    if _get_membership(db, workspace_id, invitee.id):
+    existing_invite = (
+        db.query(WorkspaceInvite)
+        .filter(WorkspaceInvite.workspace_id == workspace_id, WorkspaceInvite.email == email_lower)
+        .first()
+    )
+    if existing_invite:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already a member of this workspace.",
+            detail="This email has already been invited to this workspace.",
         )
 
-    membership = Membership(user_id=invitee.id, workspace_id=workspace_id, role=invite.role)
-    db.add(membership)
+    ws_invite = WorkspaceInvite(
+        workspace_id=workspace_id, email=email_lower, role=invite.role, invited_by=current_user.id
+    )
+    db.add(ws_invite)
     db.commit()
-    db.refresh(membership)
-    return _to_member_response(membership)
+    db.refresh(ws_invite)
+    _dispatch_invite_email(
+        to_email=email_lower, workspace_name=workspace.name, invite_url=settings.FRONTEND_URL
+    )
+    return _invite_to_member_response(ws_invite)
 
 
 @router.get("/{workspace_id}/members", response_model=List[MemberResponse])
@@ -195,10 +252,11 @@ def list_members(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lists all members and roles for the workspace."""
+    """Lists all members and pending invites for the workspace."""
     _require_member(db, workspace_id, current_user.id)
     memberships = db.query(Membership).filter(Membership.workspace_id == workspace_id).all()
-    return [_to_member_response(m) for m in memberships]
+    invites = db.query(WorkspaceInvite).filter(WorkspaceInvite.workspace_id == workspace_id).all()
+    return [_to_member_response(m) for m in memberships] + [_invite_to_member_response(i) for i in invites]
 
 
 @router.put("/{workspace_id}/members/{user_id}", response_model=MemberResponse)
@@ -223,6 +281,8 @@ def update_member_role(
         )
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     if workspace.created_by == user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -232,6 +292,11 @@ def update_member_role(
     membership = _get_membership(db, workspace_id, user_id)
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found in this workspace.")
+    if membership.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Approve this member's request before changing their role.",
+        )
 
     membership.role = role_update.role
     db.commit()
@@ -251,16 +316,22 @@ def remove_member(
     remove (leave) themselves. The workspace owner (its creator) can only be removed by
     themselves — no other admin can kick the owner out.
     """
-    requester_membership = _require_member(db, workspace_id, current_user.id)
-
     is_self_leave = current_user.id == user_id
-    if requester_membership.role != "admin" and not is_self_leave:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only workspace admins can remove other members.",
-        )
+    if is_self_leave:
+        requester_membership = _get_membership(db, workspace_id, current_user.id)
+        if not requester_membership:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+    else:
+        requester_membership = _require_member(db, workspace_id, current_user.id)
+        if requester_membership.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace admins can remove other members.",
+            )
 
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
     if workspace.created_by == user_id and not is_self_leave:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -271,12 +342,13 @@ def remove_member(
     if not membership:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found in this workspace.")
 
-    if membership.role == "admin":
+    if membership.status == "active" and membership.role == "admin":
         other_admins = (
             db.query(Membership)
             .filter(
                 Membership.workspace_id == workspace_id,
                 Membership.role == "admin",
+                Membership.status == "active",
                 Membership.user_id != user_id,
             )
             .count()
@@ -291,6 +363,90 @@ def remove_member(
     db.commit()
 
 
+@router.delete("/{workspace_id}/invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_email_invite(
+    workspace_id: uuid.UUID,
+    invite_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cancels a pending email invite. Admins only."""
+    _require_admin(db, workspace_id, current_user.id)
+
+    invite = (
+        db.query(WorkspaceInvite)
+        .filter(WorkspaceInvite.id == invite_id, WorkspaceInvite.workspace_id == workspace_id)
+        .first()
+    )
+    if not invite:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found in this workspace.")
+
+    db.delete(invite)
+    db.commit()
+
+
+@router.post("/{workspace_id}/members/{user_id}/approve", response_model=MemberResponse)
+def approve_member(
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Approves a pending shared-link join request. Admins only."""
+    _require_admin(db, workspace_id, current_user.id)
+
+    membership = _get_membership(db, workspace_id, user_id)
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found in this workspace.")
+    if membership.status != "pending_approval":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="There's no join request awaiting approval for this member.",
+        )
+
+    membership.status = "active"
+    db.commit()
+    db.refresh(membership)
+    return _to_member_response(membership)
+
+
+@router.post("/{workspace_id}/members/me/accept", response_model=MemberResponse)
+def accept_invite(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Accepts a direct email invite sent to the current user."""
+    membership = _get_membership(db, workspace_id, current_user.id)
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No invite found for this workspace.")
+    if membership.status != "pending_acceptance":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="There's no pending invite for you to accept in this workspace.",
+        )
+
+    membership.status = "active"
+    db.commit()
+    db.refresh(membership)
+    return _to_member_response(membership)
+
+
+@router.get("/invites/pending", response_model=List[PendingInviteResponse])
+def list_pending_invites(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lists the current user's pending email invites."""
+    rows = (
+        db.query(Workspace, Membership)
+        .join(Membership, Membership.workspace_id == Workspace.id)
+        .filter(Membership.user_id == current_user.id, Membership.status == "pending_acceptance")
+        .all()
+    )
+    return [PendingInviteResponse(workspace=ws, role=membership.role) for ws, membership in rows]
+
+
 # --- SHARED LINKS ---
 @router.post("/{workspace_id}/share", response_model=SharedLinkResponse, status_code=status.HTTP_201_CREATED)
 def create_shared_link(
@@ -301,16 +457,30 @@ def create_shared_link(
 ):
     """Generates a secure public share token for the workspace. Admins only."""
     _require_admin(db, workspace_id, current_user.id)
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not workspace:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+
+    invite_email = link_in.invite_email.strip().lower() if link_in.invite_email else None
 
     link = SharedLink(
         workspace_id=workspace_id,
         role=link_in.role,
         expires_at=link_in.expires_at,
         password_hash=get_password_hash(link_in.password) if link_in.password else None,
+        invite_email=invite_email,
     )
     db.add(link)
     db.commit()
     db.refresh(link)
+
+    if invite_email:
+        _dispatch_invite_email(
+            to_email=invite_email,
+            workspace_name=workspace.name,
+            invite_url=build_share_link_url(link.id),
+        )
+
     return _to_shared_link_response(link)
 
 
@@ -350,7 +520,7 @@ def join_via_shared_link(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Joins the workspace behind a shared link, granting the role configured on that link."""
+    """Requests to join the workspace behind a shared link. Admins must approve."""
     link = db.query(SharedLink).filter(SharedLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared link not found or has been revoked.")
@@ -374,10 +544,10 @@ def join_via_shared_link(
 
     existing = _get_membership(db, workspace.id, current_user.id)
     if existing:
-        return SharedLinkJoinResponse(workspace=workspace, role=existing.role, already_member=True)
+        return SharedLinkJoinResponse(workspace=workspace, role=existing.role, status=existing.status)
 
-    membership = Membership(user_id=current_user.id, workspace_id=workspace.id, role=link.role)
+    membership = Membership(user_id=current_user.id, workspace_id=workspace.id, role=link.role, status="pending_approval")
     db.add(membership)
     db.commit()
 
-    return SharedLinkJoinResponse(workspace=workspace, role=membership.role, already_member=False)
+    return SharedLinkJoinResponse(workspace=workspace, role=membership.role, status="pending_approval")

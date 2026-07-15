@@ -15,11 +15,14 @@ const JoinWorkspace = () => {
     const join = async (password) => {
       try {
         const response = await api.post(`/workspaces/share/${linkId}/join`, { password: password || null });
-        const { workspace, role, already_member } = response.data;
-        if (already_member) {
+        const { workspace, role, status } = response.data;
+        if (status === 'active') {
           window.alert(`You're already a member of "${workspace.name}".`);
         } else {
-          window.alert(`You've joined "${workspace.name}" as ${role}.`);
+          window.alert(
+            `Your request to join "${workspace.name}" as ${role} has been sent. ` +
+              "An admin needs to approve it before it shows up in your workspaces."
+          );
         }
         navigate('/', { replace: true });
       } catch (err) {
@@ -40,7 +43,10 @@ const JoinWorkspace = () => {
       }
     };
 
-    const wantsToJoin = window.confirm("You've been invited to join a workspace via a shared link. Join now?");
+    const wantsToJoin = window.confirm(
+      "You've been invited to join a workspace via a shared link. Request to join now? " +
+        "An admin will need to approve your request before you get access."
+    );
     if (wantsToJoin) {
       join(null);
     } else {

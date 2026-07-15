@@ -4,6 +4,7 @@ Main FastAPI entrypoint. Auto-creates SQL tables, mounts routers, and configures
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import settings
 from app.database import Base, engine
 from app.routers import auth, api_keys, health, workspaces
 
@@ -16,10 +17,10 @@ app = FastAPI(
 )
 
 
-# CORS middleware configuration for local React development
+# CORS middleware configuration, origin sourced from env (FRONTEND_URL)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

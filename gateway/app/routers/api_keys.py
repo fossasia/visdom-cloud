@@ -8,11 +8,11 @@ import secrets
 import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.dependencies import get_db, get_current_user
-from app.models import APIKey, User
+from app.models import APIKey, Membership, User, Workspace
 from app.schemas import APIKeyCreate, APIKeyResponse, APIKeyCreatedResponse
 
 router = APIRouter(prefix="/keys", tags=["keys"])
@@ -27,6 +27,26 @@ def create_api_key(
     Generates a secure API key, stores its prefix & SHA-256 hash in DB,
     and returns the raw key to the user (only displayed once).
     """
+    workspaces: List[Workspace] = []
+    if key_in.scope == "workspace":
+        unique_ws_ids = list(dict.fromkeys(key_in.workspace_ids))
+        memberships = (
+            db.query(Membership)
+            .options(joinedload(Membership.workspace))
+            .filter(
+                Membership.user_id == current_user.id,
+                Membership.workspace_id.in_(unique_ws_ids),
+                Membership.status == "active",
+            )
+            .all()
+        )
+        if len(memberships) != len(unique_ws_ids):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have active access to one or more of the specified workspaces.",
+            )
+        workspaces = [m.workspace for m in memberships]
+
     # Generate key: prefix + 32 random characters
     raw_secret = secrets.token_hex(16)
     prefix = settings.API_KEY_PREFIX
@@ -40,24 +60,18 @@ def create_api_key(
         name=key_in.name,
         prefix=f"{prefix}_{raw_secret[:6]}...",  # Displayable mask
         hashed_key=hashed_key,
-        user_id=current_user.id
+        user_id=current_user.id,
+        scope=key_in.scope,
+        workspaces=workspaces,
+        expires_at=key_in.expires_at,
     )
-    
+
     db.add(db_key)
     db.commit()
     db.refresh(db_key)
 
-    # Attach the raw key to response schema
-    
-    return APIKeyCreatedResponse(
-        id=db_key.id,
-        name=db_key.name,
-        prefix=db_key.prefix,
-        is_active=db_key.is_active,
-        created_at=db_key.created_at,
-        last_used_at=db_key.last_used_at,
-        raw_key=raw_key
-    )
+    base = APIKeyResponse.model_validate(db_key, from_attributes=True)
+    return APIKeyCreatedResponse(**base.model_dump(), raw_key=raw_key)
 
 
 @router.get("", response_model=List[APIKeyResponse])
@@ -66,7 +80,12 @@ def list_api_keys(
     db: Session = Depends(get_db)
 ):
     """Lists all active API keys associated with the authenticated user."""
-    return db.query(APIKey).filter(APIKey.user_id == current_user.id).all()
+    return (
+        db.query(APIKey)
+        .options(joinedload(APIKey.workspaces))
+        .filter(APIKey.user_id == current_user.id)
+        .all()
+    )
 
 
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
