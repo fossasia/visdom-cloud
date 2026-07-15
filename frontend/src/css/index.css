@@ -689,7 +689,11 @@ body {
   border: 1px solid var(--vc-border);
   background: var(--vc-surface);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
+
+.gc-price-card .gc-price-features { flex: 1; }
 
 .gc-price-card.current {
   border-color: var(--vc-blue);

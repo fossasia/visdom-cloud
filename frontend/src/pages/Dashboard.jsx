@@ -214,7 +214,7 @@ const Dashboard = () => {
               <SharedLinksTab workspaceId={activeWorkspace.id} isAdmin={isAdmin} />
             )}
 
-            {activeTab === 'billing' && <BillingTab user={user} />}
+            {activeTab === 'billing' && <BillingTab />}
           </>
         )}
       </main>
