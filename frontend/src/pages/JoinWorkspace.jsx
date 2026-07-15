@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';

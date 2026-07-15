@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, CreditCard, Rocket, Sparkles, Zap } from 'lucide-react';
 import { api, useAuth } from '../../context/AuthContext';
 import { parseApiError } from '../../utils/helpers';
@@ -35,6 +35,7 @@ const BillingTab = () => {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

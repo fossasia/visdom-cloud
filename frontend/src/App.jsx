@@ -1,5 +1,4 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';

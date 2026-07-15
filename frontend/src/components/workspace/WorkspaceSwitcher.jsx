@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Building2, ChevronDown } from 'lucide-react';
 import SelectWorkspaceModal from './SelectWorkspaceModal';
 

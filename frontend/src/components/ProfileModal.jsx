@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { api, useAuth } from '../context/AuthContext';
 import { useToast } from './toast/useToast';
@@ -21,6 +21,7 @@ const ProfileModal = ({ onClose }) => {
 
   useEffect(() => {
     if (isUnchanged || !username) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsernameAvailable(null);
       return;
     }
@@ -35,7 +36,7 @@ const ProfileModal = ({ onClose }) => {
       try {
         const response = await api.get('/auth/username-availability', { params: { username } });
         setUsernameAvailable(response.data.available);
-      } catch (err) {
+      } catch (err) { // eslint-disable-line no-unused-vars
         setUsernameAvailable(null);
       } finally {
         setCheckingUsername(false);

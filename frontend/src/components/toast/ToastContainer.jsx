@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Toast from './Toast';
 import { subscribeToasts } from './toastBus';

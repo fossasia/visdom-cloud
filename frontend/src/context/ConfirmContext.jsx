@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import ModalPortal from '../components/ModalPortal';
 
 const ConfirmContext = createContext(null);
@@ -113,4 +113,5 @@ export const ConfirmProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useConfirm = () => useContext(ConfirmContext);

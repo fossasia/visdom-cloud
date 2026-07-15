@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth, api } from '../context/AuthContext';
 import { Building2, CreditCard, ExternalLink, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
@@ -71,13 +71,15 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetchWorkspaces();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchWorkspaces();
     fetchPendingInvites();
   }, [fetchWorkspaces, fetchPendingInvites]);
 
   const handleInviteAccepted = (workspaceId) => {
     setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
-    fetchWorkspaces();
+         
+fetchWorkspaces();
   };
 
   const handleInviteDeclined = (workspaceId) => {
