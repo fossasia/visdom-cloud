@@ -2,9 +2,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Key, Plus, Terminal, Trash2, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../toast/useToast';
 import { EXPIRY_PRESETS, describeExpiry, parseApiError, resolveExpiresAt } from '../../utils/helpers';
 
 const KeysTab = ({ workspaces = [] }) => {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [keys, setKeys] = useState([]);
   const [keyName, setKeyName] = useState('');
   const [scope, setScope] = useState('org');
@@ -69,15 +73,20 @@ const KeysTab = ({ workspaces = [] }) => {
   };
 
   const handleRevokeKey = async (id) => {
-    if (!window.confirm('Are you sure you want to revoke this API key? This action is permanent.')) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Revoke API key',
+      message: 'Revoke this API key? This is permanent, and any pipeline still using it will stop working.',
+      confirmText: 'Revoke',
+      danger: true,
+    });
+    if (!ok) return;
 
     try {
       await api.delete(`/keys/${id}`);
       fetchKeys();
+      toast.success('API key revoked.');
     } catch (err) {
-      alert('Failed to revoke API key');
+      toast.error('Failed to revoke API key.');
     }
   };
 

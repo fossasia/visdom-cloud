@@ -626,6 +626,20 @@ body {
 .gc-field { margin-bottom: 14px; }
 .gc-field:last-of-type { margin-bottom: 0; }
 
+.gc-confirm-header { margin-bottom: 12px; }
+
+.gc-confirm-message {
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.gc-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 .gc-form-error {
   background: rgba(217, 83, 79, 0.1);
   border: 1px solid var(--vc-danger);

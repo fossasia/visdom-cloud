@@ -2,14 +2,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Crown, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../toast/useToast';
 import InviteMemberModal from './InviteMemberModal';
 import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
 
 const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [showInvite, setShowInvite] = useState(false);
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const fetchMembers = useCallback(async () => {
     setLoading(true);
@@ -33,31 +36,42 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
   };
 
   const handleRoleChange = async (userId, role) => {
-    setError('');
     try {
       const response = await api.put(`/workspaces/${workspaceId}/members/${userId}`, { role });
       setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
+      toast.success('Role updated.');
     } catch (err) {
-      setError(parseApiError(err, 'Failed to update role.'));
+      toast.error(parseApiError(err, 'Failed to update role.'));
     }
   };
 
   const handleRemove = async (userId) => {
-    if (!window.confirm('Remove this member from the workspace?')) return;
+    const ok = await confirm({
+      title: 'Remove member',
+      message: 'Remove this member from the workspace? They will lose access immediately.',
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!ok) return;
 
-    setError('');
     try {
       await api.delete(`/workspaces/${workspaceId}/members/${userId}`);
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+      toast.success('Member removed.');
     } catch (err) {
-      setError(parseApiError(err, 'Failed to remove member.'));
+      toast.error(parseApiError(err, 'Failed to remove member.'));
     }
   };
 
-  const handleDecline = async (member, confirmMessage) => {
-    if (!window.confirm(confirmMessage)) return;
+  const handleDecline = async (member, opts) => {
+    const ok = await confirm({
+      title: opts.title,
+      message: opts.message,
+      confirmText: opts.confirmText,
+      danger: true,
+    });
+    if (!ok) return;
 
-    setError('');
     try {
       if (member.invite_id) {
         await api.delete(`/workspaces/${workspaceId}/invites/${member.invite_id}`);
@@ -65,18 +79,19 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
         await api.delete(`/workspaces/${workspaceId}/members/${member.user_id}`);
       }
       setMembers((prev) => prev.filter((m) => m !== member));
+      toast.success(opts.successMessage);
     } catch (err) {
-      setError(parseApiError(err, 'Failed to cancel.'));
+      toast.error(parseApiError(err, 'Failed to cancel.'));
     }
   };
 
   const handleApprove = async (userId) => {
-    setError('');
     try {
       const response = await api.post(`/workspaces/${workspaceId}/members/${userId}/approve`);
       setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
+      toast.success('Request approved.');
     } catch (err) {
-      setError(parseApiError(err, 'Failed to approve request.'));
+      toast.error(parseApiError(err, 'Failed to approve request.'));
     }
   };
 
@@ -94,8 +109,6 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
           </button>
         )}
       </div>
-
-      {error && <div className="gc-form-error">{error}</div>}
 
       {loading ? (
         <div className="gc-empty">Loading members...</div>
@@ -151,7 +164,14 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                     </button>
                     <button
                       className="gc-btn gc-btn-danger gc-btn-icon gc-btn-icon-compact"
-                      onClick={() => handleDecline(m, 'Decline this join request?')}
+                      onClick={() =>
+                        handleDecline(m, {
+                          title: 'Decline request',
+                          message: 'Decline this join request?',
+                          confirmText: 'Decline',
+                          successMessage: 'Request declined.',
+                        })
+                      }
                       title="Decline request"
                       type="button"
                     >
@@ -164,7 +184,14 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
                   <div className="gc-flex-row-center">
                     <button
                       className="gc-btn gc-btn-danger gc-btn-icon gc-btn-icon-compact"
-                      onClick={() => handleDecline(m, 'Cancel this invite?')}
+                      onClick={() =>
+                        handleDecline(m, {
+                          title: 'Cancel invite',
+                          message: 'Cancel this invite?',
+                          confirmText: 'Cancel invite',
+                          successMessage: 'Invite cancelled.',
+                        })
+                      }
                       title="Cancel invite"
                       type="button"
                     >

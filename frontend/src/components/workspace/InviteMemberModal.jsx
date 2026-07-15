@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useToast } from '../toast/useToast';
 import { parseApiError } from '../../utils/helpers';
 import ModalPortal from '../ModalPortal';
 
@@ -10,6 +11,7 @@ const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
   const [role, setRole] = useState('member');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,6 +24,7 @@ const InviteMemberModal = ({ workspaceId, onClose, onInvited }) => {
         email: email.trim(),
         role,
       });
+      toast.success(`Invitation sent to ${email.trim()}.`);
       onInvited(response.data);
     } catch (err) {
       setError(parseApiError(err, 'Failed to invite member.'));

@@ -2,9 +2,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Link2, Lock, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../toast/useToast';
 import { EXPIRY_PRESETS, ROLE_BADGE, parseApiError, resolveExpiresAt } from '../../utils/helpers';
 
 const SharedLinksTab = ({ workspaceId, isAdmin }) => {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState('member');
@@ -49,6 +53,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       setCustomExpiresAt('');
       setPassword('');
       setInviteEmail('');
+      toast.success('Share link generated.');
     } catch (err) {
       setError(parseApiError(err, 'Failed to generate share link.'));
     } finally {
@@ -57,12 +62,19 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   };
 
   const handleRevoke = async (linkId) => {
-    if (!window.confirm('Revoke this share link? Anyone using it will lose access.')) return;
+    const ok = await confirm({
+      title: 'Revoke share link',
+      message: 'Revoke this share link? Anyone using it will lose access.',
+      confirmText: 'Revoke',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/workspaces/share/${linkId}`);
       setLinks((prev) => prev.filter((l) => l.id !== linkId));
+      toast.success('Share link revoked.');
     } catch (err) {
-      alert('Failed to revoke share link.');
+      toast.error('Failed to revoke share link.');
     }
   };
 

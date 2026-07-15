@@ -121,8 +121,9 @@ const Register = () => {
     <div className="auth-wrapper">
       <div className="visdom-panel auth-panel">
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <h2 className="visdom-logo" style={{ fontSize: '24px', margin: '0 0 4px 0' }}>
-            visdom
+          <h2 className="visdom-logo" style={{ fontSize: '24px', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <img src="/logo.svg" alt="Visdom Logo" style={{ height: '32px', width: '32px', borderRadius: '4px' }} />
+            <span>visdom</span>
           </h2>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Create your user account</div>
         </div>

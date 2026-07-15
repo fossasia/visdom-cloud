@@ -106,8 +106,9 @@ const Dashboard = () => {
   return (
     <div className="gc-shell">
       <aside className="gc-sidebar">
-        <a href="/" className="gc-logo">
-          visdom
+        <a href="/" className="gc-logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <img src="/logo.svg" alt="Visdom Logo" style={{ height: '24px', width: '24px', borderRadius: '4px' }} />
+          <span>visdom</span>
         </a>
 
         {!workspacesLoading && (
