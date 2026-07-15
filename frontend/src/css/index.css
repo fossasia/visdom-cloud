@@ -437,6 +437,15 @@ body {
   background: var(--vc-blue);
 }
 
+.gc-tab-viz {
+  text-decoration: none;
+  margin-top: 6px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gc-tab-ext { margin-left: auto; opacity: 0.55; }
+
 /* Buttons */
 .gc-btn {
   height: 32px;
