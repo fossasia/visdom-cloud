@@ -12,6 +12,7 @@ Uses UUIDs for primary keys to align with the PostgreSQL production specificatio
 import datetime
 import uuid
 
+
 def utcnow() -> datetime.datetime:
     """Timezone-aware replacement for the deprecated datetime.utcnow()."""
     return datetime.datetime.now(datetime.timezone.utc)
@@ -20,6 +21,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+
 
 class User(Base):
     __tablename__ = "users"

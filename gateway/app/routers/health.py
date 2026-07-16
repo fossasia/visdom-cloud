@@ -14,6 +14,7 @@ Health check router to verify the status of the gateway and its database connect
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
 from app.dependencies import get_db
 
 router = APIRouter(prefix="/health", tags=["health"])
@@ -32,4 +33,4 @@ def health_check(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Database connection failed: {str(e)}"
-        )
+        ) from e

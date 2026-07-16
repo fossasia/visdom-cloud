@@ -7,13 +7,14 @@ import hashlib
 import secrets
 import uuid
 from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_current_user, get_db
 from app.models import APIKey, Membership, User, Workspace
-from app.schemas import APIKeyCreate, APIKeyResponse, APIKeyCreatedResponse
+from app.schemas import APIKeyCreate, APIKeyCreatedResponse, APIKeyResponse
 
 router = APIRouter(prefix="/keys", tags=["keys"])
 
@@ -99,7 +100,7 @@ def revoke_api_key(
         APIKey.id == key_id,
         APIKey.user_id == current_user.id
     ).first()
-    
+
     if not key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

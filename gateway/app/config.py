@@ -11,6 +11,7 @@ Manages database paths, JWT encryption secrets, and token expiration times.
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     COOKIE_SECURE: bool = False

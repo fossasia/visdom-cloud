@@ -1,5 +1,6 @@
 # Copyright 2017-present, The Visdom Authors
 import uvicorn
+
 from app.config import settings
 
 if __name__ == '__main__':

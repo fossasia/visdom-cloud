@@ -1,13 +1,23 @@
 # Copyright 2017-present, The Visdom Authors
+import itertools
+import os
+
+import bcrypt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
+os.environ["DATABASE_URL"] = "sqlite://"
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-0123456789abcdef")
+
+from app import security
 from app.database import Base
 from app.dependencies import get_db
+from app.main import app
+
+security.gensalt = lambda: bcrypt.gensalt(rounds=4)
 
 # Setup a clean in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -18,6 +28,8 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+_counter = itertools.count(1)
 
 @pytest.fixture(scope="function", autouse=True)
 def setup_database():
@@ -50,3 +62,56 @@ def client(db_session):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+@pytest.fixture
+def make_user(client):
+    def _make(email=None, password="securepassword", username=None):
+        if email is None:
+            email = f"user{next(_counter)}@example.com"
+        payload = {"email": email, "password": password}
+        if username:
+            payload["username"] = username
+        registered = client.post("/api/v1/auth/register", json=payload)
+        assert registered.status_code == 201, registered.text
+        logged_in = client.post(
+            "/api/v1/auth/login", data={"username": email, "password": password}
+        )
+        assert logged_in.status_code == 200, logged_in.text
+        return {
+            "id": registered.json()["id"],
+            "email": registered.json()["email"],
+            "username": registered.json()["username"],
+            "password": password,
+            "headers": {"Authorization": f"Bearer {logged_in.json()['access_token']}"},
+        }
+    return _make
+
+@pytest.fixture
+def make_workspace(client):
+    def _make(user, name=None, slug=None):
+        n = next(_counter)
+        response = client.post(
+            "/api/v1/workspaces",
+            json={"name": name or f"Workspace {n}", "slug": slug or f"workspace-{n}"},
+            headers=user["headers"],
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+    return _make
+
+@pytest.fixture
+def add_member(client):
+    def _add(admin, workspace, invitee, role="member"):
+        invited = client.post(
+            f"/api/v1/workspaces/{workspace['id']}/members",
+            json={"email": invitee["email"], "role": role},
+            headers=admin["headers"],
+        )
+        assert invited.status_code == 201, invited.text
+        accepted = client.post(
+            f"/api/v1/workspaces/{workspace['id']}/members/me/accept",
+            headers=invitee["headers"],
+        )
+        assert accepted.status_code == 200, accepted.text
+        return accepted.json()
+    return _add
