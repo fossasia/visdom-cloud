@@ -12,8 +12,8 @@ and API key provisioning. Standardizes the fields for API validation using UUID 
 import datetime
 import uuid
 from typing import List, Literal, Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 # --- USER SCHEMAS ---
 USERNAME_PATTERN = r"^[a-z0-9_-]{3,30}$"

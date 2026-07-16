@@ -11,10 +11,12 @@ Manages signing and decoding claims for short-lived access and long-lived refres
 
 import datetime
 from typing import Any, Dict, Optional
-from bcrypt import gensalt, hashpw, checkpw
+
 import jwt
+from bcrypt import checkpw, gensalt, hashpw
 
 from app.config import settings
+
 
 # 1. Password Hashing via Bcrypt
 def get_password_hash(password: str) -> str:
@@ -38,7 +40,7 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
         expire = now + expires_delta
     else:
         expire = now + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
@@ -52,7 +54,7 @@ def create_refresh_token(data: dict, expires_delta: Optional[datetime.timedelta]
         expire = now + expires_delta
     else:
         expire = now + datetime.timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-        
+
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt

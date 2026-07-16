@@ -1,6 +1,6 @@
 # Copyright 2017-present, The Visdom Authors
-import pytest
 from app.config import settings
+
 
 def test_register_user(client):
     """Assert user registration succeeds and enforces validation rules."""
@@ -49,7 +49,7 @@ def test_login_user(client):
     data = response.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
-    
+
     # Assert HTTP-only refresh cookie is set
     assert "refresh_token" in response.cookies
     cookie = next((c for c in response.cookies.jar if c.name == "refresh_token"), None)
@@ -104,7 +104,7 @@ def test_logout_user(client):
     # Logout
     logout_response = client.post("/api/v1/auth/logout")
     assert logout_response.status_code == 200
-    
+
     # Verify cookie has expired
     cookie = next((c for c in logout_response.cookies.jar if c.name == "refresh_token"), None)
     # A deleted cookie has max_age=0 or expires set in the past
@@ -136,7 +136,7 @@ def test_api_key_lifecycle(client):
     assert data["name"] == "test-key-1"
     assert "raw_key" in data
     assert "prefix" in data
-    
+
     key_id = data["id"]
     raw_key = data["raw_key"]
 
