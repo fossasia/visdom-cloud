@@ -1,9 +1,10 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
           headers: { Authorization: `Bearer ${initialToken}` }
         });
         setUser(userResponse.data);
-      } catch (e) {
+      } catch (e) { // eslint-disable-line no-unused-vars
         setUser(null);
         setAccessToken(null);
       } finally {
@@ -111,7 +112,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await api.post('/auth/logout');
-    } catch (e) {
+    } catch (e) {  
       console.error('Logout error', e);
     } finally {
       setAccessToken(null);
@@ -126,4 +127,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

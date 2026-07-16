@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useToast } from '../toast/useToast';

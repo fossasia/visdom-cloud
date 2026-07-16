@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, Crown, UserPlus, Users, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -27,7 +27,8 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
   }, [workspaceId]);
 
   useEffect(() => {
-    fetchMembers();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchMembers();
   }, [fetchMembers]);
 
   const handleInvited = (member) => {

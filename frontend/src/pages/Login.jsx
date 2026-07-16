@@ -1,6 +1,6 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
@@ -11,6 +11,8 @@ const Login = () => {
   
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,7 +21,7 @@ const Login = () => {
     
     try {
       await login(email, password);
-      navigate('/', { replace: true });
+      navigate(from, { replace: true });
     } catch (err) {
       const detail = err.response?.data?.detail;
       let errorMsg = 'Login failed. Please check your credentials.';
@@ -107,7 +109,7 @@ const Login = () => {
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
           Don't have an account?{' '}
-          <Link to="/register" style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
+          <Link to="/register" state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
             Sign up
           </Link>
         </div>

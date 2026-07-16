@@ -102,3 +102,40 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyCreatedResponse(APIKeyResponse):
     raw_key: str  # Only returned once on creation
+
+
+# --- BILLING SCHEMAS ---
+class PlanLimits(BaseModel):
+    workspaces: Optional[int] = None
+    members: Optional[int] = None
+    api_keys: Optional[int] = None
+
+
+class PlanResponse(BaseModel):
+    id: str
+    name: str
+    price: Optional[int] = None
+    limits: PlanLimits
+    retention_days: Optional[int] = None
+    features: List[str]
+
+
+class UsageMetric(BaseModel):
+    used: int
+    limit: Optional[int] = None
+
+
+class SubscriptionUsage(BaseModel):
+    workspaces: UsageMetric
+    members: UsageMetric
+    api_keys: UsageMetric
+
+
+class SubscriptionResponse(BaseModel):
+    tier: str
+    plan: PlanResponse
+    usage: SubscriptionUsage
+
+
+class SubscriptionUpdate(BaseModel):
+    tier: Literal["free", "pro", "enterprise"]

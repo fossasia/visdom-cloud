@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Building2, LogOut, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';

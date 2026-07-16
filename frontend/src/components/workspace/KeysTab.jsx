@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Key, Plus, Terminal, Trash2, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -24,13 +24,14 @@ const KeysTab = ({ workspaces = [] }) => {
     try {
       const response = await api.get('/keys');
       setKeys(response.data);
-    } catch (err) {
+    } catch (err) {  
       console.error('Error fetching API keys', err);
     }
   }, []);
 
   useEffect(() => {
-    fetchKeys();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchKeys();
   }, [fetchKeys]);
 
   const toggleWorkspace = (workspaceId) => {
@@ -64,8 +65,9 @@ const KeysTab = ({ workspaces = [] }) => {
       setSelectedWorkspaceIds([]);
       setExpiryPreset('none');
       setCustomExpiresAt('');
-      fetchKeys();
-    } catch (err) {
+           
+fetchKeys();
+    } catch (err) {  
       setError(parseApiError(err, 'Failed to create API key.'));
     } finally {
       setSubmitting(false);
@@ -83,9 +85,10 @@ const KeysTab = ({ workspaces = [] }) => {
 
     try {
       await api.delete(`/keys/${id}`);
-      fetchKeys();
+           
+fetchKeys();
       toast.success('API key revoked.');
-    } catch (err) {
+    } catch (err) { // eslint-disable-line no-unused-vars
       toast.error('Failed to revoke API key.');
     }
   };
