@@ -128,6 +128,21 @@ def update_username(
     return current_user
 
 
+def _set_session_cookie(response: Response, access_token: str) -> None:
+    """Sets a broad-path cookie carrying the access token so the nginx reverse
+    proxy can gate console and visdom routes (including the visdom websocket,
+    which cannot send Authorization headers) via an auth_request subrequest."""
+    response.set_cookie(
+        key="session_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+
+
 @router.post("/login", response_model=Token)
 def login(
     response: Response,
@@ -167,6 +182,7 @@ def login(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",  # scope cookie to auth endpoints
     )
+    _set_session_cookie(response, access_token)
 
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -225,6 +241,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",
     )
+    _set_session_cookie(response, new_access_token)
 
     return {"access_token": new_access_token, "token_type": "bearer"}
 
@@ -233,7 +250,29 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
 def logout(response: Response):
     """Deletes the refresh token cookie, terminating the session."""
     response.delete_cookie(key="refresh_token", path="/api/v1/auth")
+    response.delete_cookie(key="session_token", path="/")
     return {"detail": "Successfully logged out"}
+
+
+@router.get("/verify")
+def verify_session(request: Request):
+    """auth_request target for the nginx reverse proxy: returns 200 when the
+    session cookie carries a valid, unexpired access token and 401 otherwise.
+    Stateless (no DB lookup) so it stays cheap per proxied request."""
+    token = request.cookies.get("session_token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie."
+        )
+    try:
+        payload = decode_token(token)
+        if payload.get("sub") is None or payload.get("type") != "access":
+            raise jwt.PyJWTError()
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session."
+        ) from None
+    return {"status": "ok"}
 
 
 @router.get("/me", response_model=UserResponse)
