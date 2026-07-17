@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Link2, Lock, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -25,7 +25,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
     try {
       const response = await api.get(`/workspaces/${workspaceId}/share`);
       setLinks(response.data);
-    } catch (err) {
+    } catch (err) {  
       console.error('Error fetching shared links', err);
     } finally {
       setLoading(false);
@@ -33,7 +33,8 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   }, [workspaceId]);
 
   useEffect(() => {
-    fetchLinks();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchLinks();
   }, [fetchLinks]);
 
   const handleCreate = async (e) => {
@@ -54,7 +55,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       setPassword('');
       setInviteEmail('');
       toast.success('Share link generated.');
-    } catch (err) {
+    } catch (err) {  
       setError(parseApiError(err, 'Failed to generate share link.'));
     } finally {
       setSubmitting(false);
@@ -73,7 +74,7 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
       await api.delete(`/workspaces/share/${linkId}`);
       setLinks((prev) => prev.filter((l) => l.id !== linkId));
       toast.success('Share link revoked.');
-    } catch (err) {
+    } catch (err) { // eslint-disable-line no-unused-vars
       toast.error('Failed to revoke share link.');
     }
   };

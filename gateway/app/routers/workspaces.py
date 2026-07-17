@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_current_user, get_db
 from app.email import build_share_link_url, send_workspace_invite_email
 from app.models import Membership, SharedLink, User, Workspace, WorkspaceInvite, utcnow
 from app.schemas.workspace import (
@@ -534,19 +534,27 @@ def join_via_shared_link(
 
     if link.password_hash:
         if not join_in.password:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This shared link requires a password.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="This shared link requires a password."
+            )
         if not verify_password(join_in.password, link.password_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password for this shared link.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect password for this shared link."
+            )
 
     workspace = db.query(Workspace).filter(Workspace.id == link.workspace_id).first()
     if not workspace:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The workspace behind this link no longer exists.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="The workspace behind this link no longer exists."
+        )
 
     existing = _get_membership(db, workspace.id, current_user.id)
     if existing:
         return SharedLinkJoinResponse(workspace=workspace, role=existing.role, status=existing.status)
 
-    membership = Membership(user_id=current_user.id, workspace_id=workspace.id, role=link.role, status="pending_approval")
+    membership = Membership(
+        user_id=current_user.id, workspace_id=workspace.id, role=link.role, status="pending_approval"
+    )
     db.add(membership)
     db.commit()
 

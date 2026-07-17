@@ -1,5 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Building2, Check, Plus, Search, Star, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import ModalPortal from '../ModalPortal';

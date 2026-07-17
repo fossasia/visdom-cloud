@@ -12,8 +12,8 @@ and API key provisioning. Standardizes the fields for API validation using UUID 
 import datetime
 import uuid
 from typing import List, Literal, Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 # --- USER SCHEMAS ---
 USERNAME_PATTERN = r"^[a-z0-9_-]{3,30}$"
@@ -102,3 +102,40 @@ class APIKeyResponse(BaseModel):
 
 class APIKeyCreatedResponse(APIKeyResponse):
     raw_key: str  # Only returned once on creation
+
+
+# --- BILLING SCHEMAS ---
+class PlanLimits(BaseModel):
+    workspaces: Optional[int] = None
+    members: Optional[int] = None
+    api_keys: Optional[int] = None
+
+
+class PlanResponse(BaseModel):
+    id: str
+    name: str
+    price: Optional[int] = None
+    limits: PlanLimits
+    retention_days: Optional[int] = None
+    features: List[str]
+
+
+class UsageMetric(BaseModel):
+    used: int
+    limit: Optional[int] = None
+
+
+class SubscriptionUsage(BaseModel):
+    workspaces: UsageMetric
+    members: UsageMetric
+    api_keys: UsageMetric
+
+
+class SubscriptionResponse(BaseModel):
+    tier: str
+    plan: PlanResponse
+    usage: SubscriptionUsage
+
+
+class SubscriptionUpdate(BaseModel):
+    tier: Literal["free", "pro", "enterprise"]

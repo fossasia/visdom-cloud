@@ -56,7 +56,7 @@ def _random_candidate(seed: str | None) -> str:
 
 def generate_unique_username(db: Session, seed: str | None = None) -> str:
     """Generates a username guaranteed not to collide with an existing row."""
-    from app.models import User  
+    from app.models import User
 
     for _ in range(20):
         candidate = _random_candidate(seed)

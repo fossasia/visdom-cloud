@@ -441,6 +441,15 @@ body {
 }
 .gc-tab:focus-visible { outline: 2px solid var(--vc-text-on-navy); outline-offset: -2px; }
 
+.gc-tab-viz {
+  text-decoration: none;
+  margin-top: 6px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gc-tab-ext { margin-left: auto; opacity: 0.55; }
+
 /* Buttons */
 .gc-btn {
   height: 32px;
@@ -688,7 +697,11 @@ body {
   border: 1px solid var(--vc-border);
   background: var(--vc-surface);
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
+
+.gc-price-card .gc-price-features { flex: 1; }
 
 .gc-price-card.current {
   border-color: var(--vc-blue);

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth, api } from '../context/AuthContext';
-import { Building2, CreditCard, Key, Link2, LogOut, User, Users } from 'lucide-react';
+import { Building2, CreditCard, ExternalLink, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
 import WorkspaceSettingsTab from '../components/workspace/WorkspaceSettingsTab';
 import MembersTab from '../components/workspace/MembersTab';
@@ -23,6 +23,8 @@ const TABS = [
 const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 const ACTIVE_TAB_STORAGE_KEY = 'visdom-dashboard-active-tab';
+
+const VISDOM_URL = import.meta.env.VITE_VISDOM_URL || 'http://localhost:8097';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -86,7 +88,8 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    fetchWorkspaces();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchWorkspaces();
     fetchPendingInvites();
   }, [fetchWorkspaces, fetchPendingInvites]);
 
@@ -191,6 +194,18 @@ const Dashboard = () => {
               </button>
             );
           })}
+
+          <a
+            className="gc-tab gc-tab-viz"
+            href={VISDOM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open the Visdom visualization dashboard in a new tab"
+          >
+            <LineChart size={15} />
+            <span>Visualizations</span>
+            <ExternalLink size={12} className="gc-tab-ext" />
+          </a>
         </nav>
 
         <div className="gc-sidebar-footer">
@@ -255,7 +270,7 @@ const Dashboard = () => {
               <SharedLinksTab workspaceId={activeWorkspace.id} isAdmin={isAdmin} />
             )}
 
-            {activeTab === 'billing' && <BillingTab user={user} />}
+            {activeTab === 'billing' && <BillingTab />}
           </>
         )}
       </main>

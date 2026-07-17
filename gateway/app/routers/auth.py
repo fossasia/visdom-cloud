@@ -3,35 +3,35 @@
 Authentication router handling user registration, logins, JWT refresh rotation, and logout sessions.
 """
 
-from app.models import APIKey
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
+
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-import jwt
 
 from app.config import settings
 from app.dependencies import (
-    get_db,
-    get_current_user,
-    get_api_key,
     enforce_api_key_workspace_scope,
+    get_api_key,
+    get_current_user,
+    get_db,
 )
-from app.models import Membership, User, WorkspaceInvite
+from app.models import APIKey, Membership, User, WorkspaceInvite
 from app.schemas import (
     GeneratedUsernameResponse,
     Token,
+    UserCreate,
     UsernameAvailabilityResponse,
     UsernameUpdate,
-    UserCreate,
     UserResponse,
 )
 from app.security import (
-    get_password_hash,
-    verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
+    get_password_hash,
+    verify_password,
 )
 from app.username import (
     generate_unique_username,
@@ -145,7 +145,7 @@ def login(
             detail="Incorrect email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -188,14 +188,14 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         payload = decode_token(refresh_token)
         user_id_str: str = payload.get("sub")
         token_type: str = payload.get("type")
-        
+
         if user_id_str is None or token_type != "refresh":
             raise jwt.PyJWTError()
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token."
-        )
+        ) from None
 
     try:
         user_id = uuid.UUID(user_id_str)
@@ -203,7 +203,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token."
-        )
+        ) from None
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:

@@ -11,14 +11,14 @@ and resolves user authentication via OAuth2 JWT Token extraction using UUID look
 
 import datetime
 import hashlib
+import uuid
 from typing import Generator
+
+import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-import jwt
-import uuid
 
-from app.config import settings
 from app.database import SessionLocal
 from app.models import APIKey, Membership, User, utcnow
 from app.schemas import TokenPayload
@@ -38,7 +38,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme), 
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> User:
     """
@@ -51,7 +51,7 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     if not token:
         raise credentials_exception
 
@@ -59,25 +59,25 @@ def get_current_user(
         payload = decode_token(token)
         user_id_str: str = payload.get("sub")
         token_type: str = payload.get("type")
-        
+
         # Verify it's an access token (not a refresh token)
         if user_id_str is None or token_type != "access":
             raise credentials_exception
-            
+
         token_data = TokenPayload(sub=user_id_str, type=token_type)
     except jwt.PyJWTError:
-        raise credentials_exception
-        
+        raise credentials_exception from None
+
     # Query database using UUID (explicitly converted for SQLite/compatibility)
     try:
         user_id = uuid.UUID(token_data.sub)
     except (TypeError, ValueError):
-        raise credentials_exception
+        raise credentials_exception from None
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
-        
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

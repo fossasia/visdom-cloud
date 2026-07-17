@@ -1,6 +1,6 @@
 /* Copyright 2017-present, The Visdom Authors */
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { useAuth, api } from '../context/AuthContext';
 
@@ -23,13 +23,15 @@ const Register = () => {
 
   const { register, login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
 
   const fetchSuggestion = async (seed) => {
     setAutoUsernameLoading(true);
     try {
       const response = await api.get('/auth/generate-username', { params: seed ? { seed } : {} });
       setAutoUsername(response.data.username);
-    } catch (err) {
+    } catch (err) {  
       console.error('Error generating username suggestion', err);
     } finally {
       setAutoUsernameLoading(false);
@@ -37,12 +39,13 @@ const Register = () => {
   };
 
   useEffect(() => {
-    fetchSuggestion();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+fetchSuggestion();
   }, []);
 
   useEffect(() => {
     if (usernameMode !== 'custom' || !customUsername) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setUsernameAvailable(null);
       return;
     }
@@ -57,7 +60,7 @@ const Register = () => {
       try {
         const response = await api.get('/auth/username-availability', { params: { username: customUsername } });
         setUsernameAvailable(response.data.available);
-      } catch (err) {
+      } catch (err) { // eslint-disable-line no-unused-vars
         setUsernameAvailable(null);
       } finally {
         setCheckingUsername(false);
@@ -98,8 +101,8 @@ const Register = () => {
       await register(email, password, finalUsername);
       setSuccess('Account created! Logging you in...');
       await login(email, password);
-      navigate('/', { replace: true });
-    } catch (err) {
+      navigate(from, { replace: true });
+    } catch (err) {  
       const detail = err.response?.data?.detail;
       let errorMsg = 'Registration failed. Please try again.';
       if (typeof detail === 'string') {
@@ -307,7 +310,7 @@ const Register = () => {
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
           Already have an account?{' '}
-          <Link to="/login" style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
+          <Link to="/login" state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
             Sign in
           </Link>
         </div>

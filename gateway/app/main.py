@@ -4,9 +4,10 @@ Main FastAPI entrypoint. Auto-creates SQL tables, mounts routers, and configures
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config import settings
 from app.database import Base, engine
-from app.routers import auth, api_keys, health, workspaces
+from app.routers import api_keys, auth, billing, health, workspaces
 
 # Create db tables on startup
 Base.metadata.create_all(bind=engine)
@@ -32,3 +33,4 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(api_keys.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
+app.include_router(billing.router, prefix="/api/v1")
