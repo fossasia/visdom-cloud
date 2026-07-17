@@ -19,9 +19,10 @@ const WorkspaceSwitcher = ({ workspaces, activeWorkspace, isLoading = false, onS
         className="gc-ws-trigger"
         onClick={() => setShowSelect(true)}
         type="button"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={showSelect}
         aria-controls="visdom-select-workspace-modal"
+        aria-label={activeWorkspace ? `Current workspace: ${activeWorkspace.name}. Select workspace` : 'Select workspace'}
       >
         <Building2 size={14} />
         <span className="gc-ws-trigger-label">

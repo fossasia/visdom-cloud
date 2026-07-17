@@ -98,6 +98,9 @@ const SelectWorkspaceModal = ({ workspaces = [], activeWorkspace, isLoading = fa
     }
 
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      if (isLoading) {
+        return;
+      }
       const items = Array.from(listRef.current?.querySelectorAll('.gc-ws-select-row:not([disabled])') || []);
       if (items.length === 0) return;
 
@@ -183,121 +186,128 @@ const SelectWorkspaceModal = ({ workspaces = [], activeWorkspace, isLoading = fa
           ))}
         </div>
 
-        <div
-          className="gc-ws-select-list"
-          ref={listRef}
-          role="listbox"
-          aria-label="Available workspaces"
-          aria-busy={isLoading ? 'true' : 'false'}
-        >
-          {isLoading ? (
-            <div className="gc-flex-col-gap-md gc-p-sm" aria-label="Loading workspaces">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="gc-ws-select-row gc-skeleton-row" aria-hidden="true">
-                  <span className="gc-flex-row-gap-sm-min-w gc-w-full">
-                    <div className="gc-skeleton-block gc-skeleton-icon" />
-                    <span className="gc-min-w-0 gc-w-full">
-                      <div className="gc-skeleton-block gc-skeleton-title" />
-                      <div className="gc-skeleton-block gc-skeleton-subtitle" />
-                    </span>
+        {isLoading ? (
+          <div
+            className="gc-ws-select-list gc-flex-col-gap-md gc-p-sm"
+            aria-live="polite"
+            aria-busy="true"
+            aria-label="Loading workspaces"
+          >
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="gc-ws-select-row gc-skeleton-row" aria-hidden="true">
+                <span className="gc-flex-row-gap-sm-min-w gc-w-full">
+                  <div className="gc-skeleton-block gc-skeleton-icon" />
+                  <span className="gc-min-w-0 gc-w-full">
+                    <div className="gc-skeleton-block gc-skeleton-title" />
+                    <div className="gc-skeleton-block gc-skeleton-subtitle" />
                   </span>
-                </div>
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="gc-empty gc-border-none">
-              {workspaces.length === 0 ? (
-                <>
-                  <Building2 size={28} className="gc-text-muted gc-mx-auto gc-mb-1" />
-                  <div className="gc-empty-title">No workspaces found</div>
-                  <div className="gc-empty-desc">
-                    You haven't created or joined any workspaces yet. Create your first workspace to get started.
-                  </div>
-                  <button
-                    type="button"
-                    className="gc-btn gc-btn-primary gc-mt-sm"
-                    onClick={() => setShowCreateModal(true)}
-                  >
-                    <Plus size={14} />
-                    New Workspace
-                  </button>
-                </>
-              ) : section === 'starred' ? (
-                <>
-                  <Star size={28} className="gc-text-star-inactive gc-mx-auto gc-mb-1" />
-                  <div className="gc-empty-title">No starred workspaces</div>
-                  <div className="gc-empty-desc">
-                    Click the star icon next to any workspace to pin it here for quick access.
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Search size={28} className="gc-text-muted gc-mx-auto gc-mb-1" />
-                  <div className="gc-empty-title">No matching workspaces</div>
-                  <div className="gc-empty-desc">
-                    We couldn't find any workspace matching "{query}".
-                  </div>
-                  {query && (
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className="gc-ws-select-list"
+            ref={listRef}
+            role="listbox"
+            aria-label="Available workspaces"
+          >
+            {filtered.length === 0 ? (
+              <div className="gc-empty gc-border-none">
+                {workspaces.length === 0 ? (
+                  <>
+                    <Building2 size={28} className="gc-text-muted gc-mx-auto gc-mb-1" />
+                    <div className="gc-empty-title">No workspaces found</div>
+                    <div className="gc-empty-desc">
+                      You haven't created or joined any workspaces yet. Create your first workspace to get started.
+                    </div>
                     <button
                       type="button"
-                      className="gc-btn gc-btn-sm gc-mt-sm"
-                      onClick={() => setQuery('')}
+                      className="gc-btn gc-btn-primary gc-mt-sm"
+                      onClick={() => setShowCreateModal(true)}
                     >
-                      Clear Search
+                      <Plus size={14} />
+                      New Workspace
                     </button>
-                  )}
-                </>
-              )}
-            </div>
-          ) : (
-            filtered.map((ws) => {
-              const isActive = activeWorkspace?.id === ws.id;
-              return (
-                <button
-                  key={ws.id}
-                  type="button"
-                  role="option"
-                  aria-selected={isActive ? 'true' : 'false'}
-                  tabIndex={0}
-                  onClick={() => handleSwitch(ws)}
-                  className={`gc-ws-select-row ${isActive ? 'active' : ''}`}
-                >
-                  <span className="gc-flex-row-gap-sm-min-w">
-                    <Building2 size={14} className="gc-shrink-0" />
-                    <span className="gc-min-w-0">
-                      <div className="gc-ws-item-name gc-truncate">
-                        {ws.name}
-                      </div>
-                      <div className="gc-ws-item-slug gc-truncate">
-                        {ws.slug} <span className="gc-font-mono">· {ws.id}</span>
-                      </div>
+                  </>
+                ) : section === 'starred' ? (
+                  <>
+                    <Star size={28} className="gc-text-star-inactive gc-mx-auto gc-mb-1" />
+                    <div className="gc-empty-title">No starred workspaces</div>
+                    <div className="gc-empty-desc">
+                      Click the star icon next to any workspace to pin it here for quick access.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Search size={28} className="gc-text-muted gc-mx-auto gc-mb-1" />
+                    <div className="gc-empty-title">No matching workspaces</div>
+                    <div className="gc-empty-desc">
+                      We couldn't find any workspace matching "{query}".
+                    </div>
+                    {query && (
+                      <button
+                        type="button"
+                        className="gc-btn gc-btn-sm gc-mt-sm"
+                        onClick={() => setQuery('')}
+                      >
+                        Clear Search
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              filtered.map((ws) => {
+                const isActive = activeWorkspace?.id === ws.id;
+                return (
+                  <div
+                    key={ws.id}
+                    role="option"
+                    aria-selected={isActive}
+                    tabIndex={0}
+                    onClick={() => handleSwitch(ws)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSwitch(ws);
+                      }
+                    }}
+                    className={`gc-ws-select-row ${isActive ? 'active' : ''}`}
+                  >
+                    <span className="gc-flex-row-gap-sm-min-w">
+                      <Building2 size={14} className="gc-shrink-0" />
+                      <span className="gc-min-w-0">
+                        <div className="gc-ws-item-name gc-truncate">
+                          {ws.name}
+                        </div>
+                        <div className="gc-ws-item-slug gc-truncate">
+                          {ws.slug} <span className="gc-font-mono">· {ws.id}</span>
+                        </div>
+                      </span>
                     </span>
-                  </span>
 
-                  <span className="gc-flex-row-gap-sm-min-w gc-shrink-0">
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => handleToggleStar(e, ws)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
+                    <span className="gc-flex-row-gap-sm-min-w gc-shrink-0">
+                      <button
+                        type="button"
+                        tabIndex={0}
+                        onClick={(e) => {
                           e.stopPropagation();
                           handleToggleStar(e, ws);
-                        }
-                      }}
-                      title={ws.starred ? 'Unstar workspace' : 'Star workspace'}
-                      className={`gc-btn-unstyled-flex ${ws.starred ? 'gc-text-star-active' : 'gc-text-star-inactive'}`}
-                    >
-                      <Star size={15} fill={ws.starred ? '#f59e0b' : 'none'} />
+                        }}
+                        title={ws.starred ? 'Unstar workspace' : 'Star workspace'}
+                        className={`gc-btn-unstyled-flex ${ws.starred ? 'gc-text-star-active' : 'gc-text-star-inactive'}`}
+                      >
+                        <Star size={15} fill={ws.starred ? '#f59e0b' : 'none'} />
+                      </button>
+                      {isActive && <Check size={15} className="gc-text-blue" />}
                     </span>
-                    {isActive && <Check size={15} className="gc-text-blue" />}
-                  </span>
-                </button>
-              );
-            })
-          )}
-        </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
 
       {showCreateModal && (
