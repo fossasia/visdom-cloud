@@ -343,9 +343,11 @@ body {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gc-ws-trigger:hover { background: rgba(255, 255, 255, 0.16); }
+.gc-ws-trigger:focus-visible { outline: 2px solid var(--vc-text-on-navy); outline-offset: -2px; }
 
 .gc-ws-trigger-label {
   overflow: hidden;
@@ -428,6 +430,7 @@ body {
   white-space: nowrap;
   text-align: left;
   width: 100%;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gc-tab:hover { color: #ffffff; background: rgba(255, 255, 255, 0.08); }
@@ -436,6 +439,7 @@ body {
   color: #ffffff;
   background: var(--vc-blue);
 }
+.gc-tab:focus-visible { outline: 2px solid var(--vc-text-on-navy); outline-offset: -2px; }
 
 .gc-tab-viz {
   text-decoration: none;
@@ -461,10 +465,12 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gc-btn:hover { background: #e6e6e6; border-color: #adadad; }
 .gc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gc-btn:focus-visible { outline: 2px solid var(--vc-blue); outline-offset: 2px; }
 
 .gc-btn-primary {
   border: 1px solid var(--vc-blue-hover);
@@ -606,11 +612,13 @@ body {
   text-align: left;
   font-size: 13px;
   color: var(--vc-text);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .gc-ws-select-row:last-child { border-bottom: none; }
 .gc-ws-select-row:hover { background: var(--vc-bg); }
 .gc-ws-select-row.active { background: rgba(33, 133, 208, 0.08); }
+.gc-ws-select-row:focus-visible { outline: 2px solid var(--vc-blue); outline-offset: -2px; }
 
 .gc-modal-header {
   display: flex;

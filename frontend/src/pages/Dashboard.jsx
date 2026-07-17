@@ -1,5 +1,6 @@
 /* Copyright 2017-present, The Visdom Authors */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth, api } from '../context/AuthContext';
 import { Building2, CreditCard, ExternalLink, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
@@ -27,15 +28,33 @@ const VISDOM_URL = import.meta.env.VITE_VISDOM_URL || 'http://localhost:8097';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [workspaces, setWorkspaces] = useState([]);
-  const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [workspacesLoading, setWorkspacesLoading] = useState(true);
   const [pendingInvites, setPendingInvites] = useState([]);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => {
+
+  const [initialStoredTab] = useState(() => {
     const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
   });
+
+  const wsParam = searchParams.get('ws');
+  const tabParam = searchParams.get('tab');
+
+  const activeTab = useMemo(() => {
+    if (tabParam && TAB_IDS.has(tabParam)) return tabParam;
+    return initialStoredTab;
+  }, [tabParam, initialStoredTab]);
+
+  const activeWorkspace = useMemo(() => {
+    if (workspaces.length === 0) return null;
+    if (wsParam) {
+      const found = workspaces.find((ws) => ws.slug === wsParam || ws.id === wsParam);
+      if (found) return found;
+    }
+    return workspaces[0] || null;
+  }, [workspaces, wsParam]);
 
   const isAdmin = activeWorkspace?.role === 'admin';
 
@@ -43,31 +62,29 @@ const Dashboard = () => {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
   }, [activeTab]);
 
-  const fetchWorkspaces = useCallback(async () => {
-    setWorkspacesLoading(true);
-    try {
-      const response = await api.get('/workspaces');
-      setWorkspaces(response.data);
-      setActiveWorkspace((prev) => {
-        if (prev) {
-          return response.data.find((ws) => ws.id === prev.id) || null;
-        }
-        return response.data[0] || null;
+  const fetchWorkspaces = useCallback(() => {
+    api
+      .get('/workspaces')
+      .then((response) => {
+        setWorkspaces(response.data);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        setWorkspacesLoading(false);
       });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setWorkspacesLoading(false);
-    }
   }, []);
 
-  const fetchPendingInvites = useCallback(async () => {
-    try {
-      const response = await api.get('/workspaces/invites/pending');
-      setPendingInvites(response.data);
-    } catch (err) {
-      console.error(err);
-    }
+  const fetchPendingInvites = useCallback(() => {
+    api
+      .get('/workspaces/invites/pending')
+      .then((response) => {
+        setPendingInvites(response.data);
+      })
+      .catch((err) => {
+        console.error(err);
+      });
   }, []);
 
   useEffect(() => {
@@ -76,10 +93,41 @@ fetchWorkspaces();
     fetchPendingInvites();
   }, [fetchWorkspaces, fetchPendingInvites]);
 
+  // Sync URL search parameters during initialization or when parameters are missing/invalid
+  useEffect(() => {
+    if (workspacesLoading || workspaces.length === 0) return;
+
+    const expectedWsParam = activeWorkspace ? activeWorkspace.slug : '';
+    const expectedTabParam = activeTab;
+
+    if (wsParam !== expectedWsParam || tabParam !== expectedTabParam) {
+      setSearchParams(
+        { ...(expectedWsParam ? { ws: expectedWsParam } : {}), tab: expectedTabParam },
+        { replace: true }
+      );
+    }
+  }, [workspaces, workspacesLoading, activeWorkspace, activeTab, wsParam, tabParam, setSearchParams]);
+
+  const handleWorkspaceSwitch = useCallback((ws) => {
+    setSearchParams(
+      { ...(ws ? { ws: ws.slug } : {}), tab: activeTab },
+      { replace: false }
+    );
+  }, [activeTab, setSearchParams]);
+
+  const handleTabClick = useCallback((tabId) => {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tabId);
+    const expectedWsParam = activeWorkspace ? activeWorkspace.slug : '';
+    setSearchParams(
+      { ...(expectedWsParam ? { ws: expectedWsParam } : {}), tab: tabId },
+      { replace: false }
+    );
+  }, [activeWorkspace, setSearchParams]);
+
   const handleInviteAccepted = (workspaceId) => {
     setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
-         
-fetchWorkspaces();
+    setWorkspacesLoading(true);
+    fetchWorkspaces();
   };
 
   const handleInviteDeclined = (workspaceId) => {
@@ -88,21 +136,27 @@ fetchWorkspaces();
 
   const handleWorkspaceCreated = (workspace) => {
     setWorkspaces((prev) => [...prev, workspace]);
-    setActiveWorkspace(workspace);
-    setActiveTab('workspaces');
+    setSearchParams({ ws: workspace.slug, tab: 'workspaces' }, { replace: false });
   };
 
   const handleWorkspaceUpdated = (workspace) => {
     setWorkspaces((prev) =>
       prev.map((ws) => (ws.id === workspace.id ? workspace : ws))
     );
-    setActiveWorkspace((prev) => (prev?.id === workspace.id ? workspace : prev));
+    if (activeWorkspace?.id === workspace.id && activeWorkspace.slug !== workspace.slug) {
+      setSearchParams({ ws: workspace.slug, tab: activeTab }, { replace: true });
+    }
   };
 
   const handleWorkspaceRemoved = (workspaceId) => {
-    setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
-    setActiveWorkspace((prev) => (prev?.id === workspaceId ? null : prev));
-    setActiveTab('workspaces');
+    const remaining = workspaces.filter((ws) => ws.id !== workspaceId);
+    setWorkspaces(remaining);
+    const nextWs = activeWorkspace?.id === workspaceId ? remaining[0] || null : activeWorkspace;
+    const expectedWsParam = nextWs ? nextWs.slug : '';
+    setSearchParams(
+      { ...(expectedWsParam ? { ws: expectedWsParam } : {}), tab: 'workspaces' },
+      { replace: true }
+    );
   };
 
   const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
@@ -119,7 +173,7 @@ fetchWorkspaces();
           <WorkspaceSwitcher
             workspaces={workspaces}
             activeWorkspace={activeWorkspace}
-            onSwitch={setActiveWorkspace}
+            onSwitch={handleWorkspaceSwitch}
             onCreated={handleWorkspaceCreated}
             onWorkspaceUpdated={handleWorkspaceUpdated}
           />
@@ -132,7 +186,7 @@ fetchWorkspaces();
               <button
                 key={tab.id}
                 className={`gc-tab ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 type="button"
               >
                 <Icon size={15} />
