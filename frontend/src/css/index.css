@@ -563,6 +563,55 @@ body {
   font-size: 13px;
 }
 
+.gc-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vc-text);
+  margin-bottom: 6px;
+}
+
+.gc-empty-desc {
+  font-size: 13px;
+  color: var(--vc-text-muted);
+  max-width: 320px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+/* Skeleton Loaders */
+@keyframes gc-skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.gc-skeleton-block {
+  background: var(--vc-border);
+  border-radius: 4px;
+  animation: gc-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.gc-skeleton-row {
+  cursor: default;
+  pointer-events: none;
+}
+
+.gc-skeleton-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.gc-skeleton-title {
+  height: 14px;
+  width: 140px;
+  margin-bottom: 6px;
+}
+
+.gc-skeleton-subtitle {
+  height: 12px;
+  width: 220px;
+}
+
 /* Modal */
 .gc-modal-overlay {
   position: fixed;

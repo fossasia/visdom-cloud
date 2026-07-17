@@ -71,15 +71,15 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-fetchWorkspaces();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchWorkspaces();
     fetchPendingInvites();
   }, [fetchWorkspaces, fetchPendingInvites]);
 
   const handleInviteAccepted = (workspaceId) => {
     setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
-         
-fetchWorkspaces();
+
+    fetchWorkspaces();
   };
 
   const handleInviteDeclined = (workspaceId) => {
@@ -105,6 +105,10 @@ fetchWorkspaces();
     setActiveTab('workspaces');
   };
 
+  const handleWorkspaceSwitch = useCallback((ws) => {
+    setActiveWorkspace(ws);
+  }, []);
+
   const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
 
   return (
@@ -115,15 +119,14 @@ fetchWorkspaces();
           <span>visdom</span>
         </a>
 
-        {!workspacesLoading && (
-          <WorkspaceSwitcher
-            workspaces={workspaces}
-            activeWorkspace={activeWorkspace}
-            onSwitch={setActiveWorkspace}
-            onCreated={handleWorkspaceCreated}
-            onWorkspaceUpdated={handleWorkspaceUpdated}
-          />
-        )}
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          activeWorkspace={activeWorkspace}
+          isLoading={workspacesLoading}
+          onSwitch={handleWorkspaceSwitch}
+          onCreated={handleWorkspaceCreated}
+          onWorkspaceUpdated={handleWorkspaceUpdated}
+        />
 
         <nav className="gc-sidebar-nav">
           {TABS.map((tab) => {
