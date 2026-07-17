@@ -98,9 +98,6 @@ const SelectWorkspaceModal = ({ workspaces = [], activeWorkspace, isLoading = fa
     }
 
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
-      if (isLoading) {
-        return;
-      }
       const items = Array.from(listRef.current?.querySelectorAll('.gc-ws-select-row:not([disabled])') || []);
       if (items.length === 0) return;
 
@@ -261,18 +258,13 @@ const SelectWorkspaceModal = ({ workspaces = [], activeWorkspace, isLoading = fa
               filtered.map((ws) => {
                 const isActive = activeWorkspace?.id === ws.id;
                 return (
-                  <div
+                  <button
                     key={ws.id}
+                    type="button"
                     role="option"
                     aria-selected={isActive}
                     tabIndex={0}
                     onClick={() => handleSwitch(ws)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleSwitch(ws);
-                      }
-                    }}
                     className={`gc-ws-select-row ${isActive ? 'active' : ''}`}
                   >
                     <span className="gc-flex-row-gap-sm-min-w">
@@ -288,21 +280,25 @@ const SelectWorkspaceModal = ({ workspaces = [], activeWorkspace, isLoading = fa
                     </span>
 
                     <span className="gc-flex-row-gap-sm-min-w gc-shrink-0">
-                      <button
-                        type="button"
+                      <span
+                        role="button"
                         tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleStar(e, ws);
+                        onClick={(e) => handleToggleStar(e, ws)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleToggleStar(e, ws);
+                          }
                         }}
                         title={ws.starred ? 'Unstar workspace' : 'Star workspace'}
                         className={`gc-btn-unstyled-flex ${ws.starred ? 'gc-text-star-active' : 'gc-text-star-inactive'}`}
                       >
                         <Star size={15} fill={ws.starred ? '#f59e0b' : 'none'} />
-                      </button>
+                      </span>
                       {isActive && <Check size={15} className="gc-text-blue" />}
                     </span>
-                  </div>
+                  </button>
                 );
               })
             )}
