@@ -16,6 +16,7 @@ from app.dependencies import (
     get_api_key,
     get_current_user,
     get_db,
+    resolve_active_api_key,
 )
 from app.models import APIKey, Membership, User, WorkspaceInvite
 from app.schemas import (
@@ -255,24 +256,29 @@ def logout(response: Response):
 
 
 @router.get("/verify")
-def verify_session(request: Request):
-    """auth_request target for the nginx reverse proxy: returns 200 when the
-    session cookie carries a valid, unexpired access token and 401 otherwise.
-    Stateless (no DB lookup) so it stays cheap per proxied request."""
+def verify_session(request: Request, db: Session = Depends(get_db)):
+    """auth_request target for the nginx reverse proxy. Returns 200 when the
+    caller presents either a valid `session_token` cookie (browser read path) or
+    a valid `X-API-KEY` (programmatic write path), and 401 otherwise. This is a
+    coarse "is this a legitimate caller?" gate; the precise workspace + role check
+    is done separately by the visdom resolve endpoints. The cookie path is
+    stateless; only the API-key path touches the DB."""
     token = request.cookies.get("session_token")
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie."
-        )
-    try:
-        payload = decode_token(token)
-        if payload.get("sub") is None or payload.get("type") != "access":
-            raise jwt.PyJWTError()
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session."
-        ) from None
-    return {"status": "ok"}
+    if token:
+        try:
+            payload = decode_token(token)
+            if payload.get("sub") is not None and payload.get("type") == "access":
+                return {"status": "ok", "auth": "session"}
+        except jwt.PyJWTError:
+            pass
+
+    if resolve_active_api_key(db, request.headers.get("X-API-KEY")) is not None:
+        return {"status": "ok", "auth": "api_key"}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No valid session or API key.",
+    )
 
 
 @router.get("/me", response_model=UserResponse)
