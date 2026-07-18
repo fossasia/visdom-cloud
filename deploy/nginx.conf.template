@@ -1,0 +1,101 @@
+# Production reverse-proxy config. Rendered by the nginx image's envsubst at
+# startup (this file lives in /etc/nginx/templates/), so ${...} values below come
+# from the environment (the compose .env) — nothing here is hardcoded. nginx's own
+# runtime variables ($host, $http_upgrade, $ws_slug, ...) are not in the env, so
+# envsubst leaves them untouched.
+#
+# This block is included inside the base image's http{}.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream console_gateway {
+    server ${GATEWAY_HOST}:${GATEWAY_PORT};
+}
+
+# Single visdom instance today. To scale out as users grow, add more `server`
+# lines here AND route each workspace consistently to one instance — visdom keeps
+# live state (envs + socket subscribers) in memory, so a workspace's writes and
+# reads must land on the same instance. Sticky-by-session is NOT enough; shard by
+# workspace, e.g.:
+#     hash $visdom_workspace consistent;
+#     server visdom-1:8097;
+#     server visdom-2:8097;
+# where $visdom_workspace is derived from the /vis/w/<slug>/ path (reads) or the
+# X-Visdom-Workspace header (writes) via a `map`.
+upstream visdom_server {
+    server ${VISDOM_HOST}:${VISDOM_PORT};
+}
+
+server {
+    listen ${NGINX_PORT};
+    server_name _;
+
+    # Built console SPA, served directly by nginx.
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/v1/ {
+        proxy_pass http://console_gateway;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Coarse auth gate: valid session cookie OR valid API key.
+    location = /_auth_verify {
+        internal;
+        proxy_pass http://console_gateway/api/v1/auth/verify;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host $host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-API-KEY $http_x_api_key;
+    }
+
+    # Browser read path: /vis/w/<slug>/... — inject the workspace from the URL.
+    location ~ ^/vis/w/(?<ws_slug>[^/]+)/(?<vis_rest>.*)$ {
+        auth_request /_auth_verify;
+        error_page 401 = @auth_redirect;
+
+        rewrite ^/vis/w/[^/]+/(.*)$ /vis/$1 break;
+        proxy_pass http://visdom_server;
+        proxy_http_version 1.1;
+        proxy_set_header X-Visdom-Workspace $ws_slug;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Write path (python client, X-API-KEY + X-Visdom-Workspace headers) and any
+    # other visdom traffic.
+    location /vis/ {
+        auth_request /_auth_verify;
+        error_page 401 = @auth_redirect;
+
+        proxy_pass http://visdom_server;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location @auth_redirect {
+        return 302 /login?next=$request_uri;
+    }
+}
