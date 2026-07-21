@@ -167,17 +167,3 @@ def enforce_api_key_workspace_scope(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This API key is not scoped to this workspace.",
             )
-
-
-def require_api_key_workspace_access(
-    workspace_id: uuid.UUID,
-    key: APIKey = Depends(get_api_key),
-    db: Session = Depends(get_db),
-) -> APIKey:
-    """
-    FastAPI dependency for routes with a `{workspace_id}` path parameter that are
-    authenticated by API key. Resolves + validates the key and enforces its
-    workspace scope binding, returning the key record on success.
-    """
-    enforce_api_key_workspace_scope(db, key, workspace_id)
-    return key
