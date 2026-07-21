@@ -23,8 +23,6 @@ const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
 const ACTIVE_TAB_STORAGE_KEY = 'visdom-dashboard-active-tab';
 
-const VISDOM_URL = import.meta.env.VITE_VISDOM_URL || 'http://localhost:8097';
-
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [workspaces, setWorkspaces] = useState([]);
@@ -143,10 +141,18 @@ fetchWorkspaces();
 
           <a
             className="gc-tab gc-tab-viz"
-            href={VISDOM_URL}
+            href={activeWorkspace ? `/vis/w/${activeWorkspace.slug}/` : undefined}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open the Visdom visualization dashboard in a new tab"
+            aria-disabled={!activeWorkspace}
+            onClick={(e) => {
+              if (!activeWorkspace) e.preventDefault();
+            }}
+            title={
+              activeWorkspace
+                ? `Open ${activeWorkspace.name}'s visualizations in a new tab`
+                : 'Select a workspace to open its visualizations'
+            }
           >
             <LineChart size={15} />
             <span>Visualizations</span>

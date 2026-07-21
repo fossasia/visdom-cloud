@@ -87,6 +87,31 @@ def get_current_user(
     return user
 
 
+def resolve_active_api_key(db: Session, raw_key: str | None) -> APIKey | None:
+    """Return the APIKey for a raw key if it exists, is active, unexpired, and its
+    owner is active; otherwise None. Does not raise, so callers that only need a
+    yes/no answer (e.g. the reverse-proxy auth gate) can use it directly."""
+    if not raw_key:
+        return None
+    hashed_key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    key_record = (
+        db.query(APIKey)
+        .filter(APIKey.hashed_key == hashed_key, APIKey.is_active.is_(True))
+        .first()
+    )
+    if not key_record:
+        return None
+    if key_record.expires_at is not None:
+        expires_at = key_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        if utcnow() > expires_at:
+            return None
+    if not key_record.owner or not key_record.owner.is_active:
+        return None
+    return key_record
+
+
 def get_api_key(
     x_api_key: str = Header(None, alias="X-API-KEY"),
     db: Session = Depends(get_db),
@@ -101,32 +126,12 @@ def get_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="X-API-KEY header is missing."
         )
-
-    hashed_key = hashlib.sha256(x_api_key.encode("utf-8")).hexdigest()
-    key_record = (
-        db.query(APIKey)
-        .filter(APIKey.hashed_key == hashed_key, APIKey.is_active.is_(True))
-        .first()
-    )
+    key_record = resolve_active_api_key(db, x_api_key)
     if not key_record:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or inactive API key."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid, expired, or inactive API key.",
         )
-
-    if key_record.expires_at is not None:
-        expires_at = key_record.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
-        if utcnow() > expires_at:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired."
-            )
-
-    if not key_record.owner or not key_record.owner.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key owner."
-        )
-
     return key_record
 
 
