@@ -16,6 +16,7 @@ from app.dependencies import (
     get_api_key,
     get_current_user,
     get_db,
+    resolve_active_api_key,
 )
 from app.models import APIKey, Membership, User, WorkspaceInvite
 from app.schemas import (
@@ -128,6 +129,21 @@ def update_username(
     return current_user
 
 
+def _set_session_cookie(response: Response, access_token: str) -> None:
+    """Sets a broad-path cookie carrying the access token so the nginx reverse
+    proxy can gate console and visdom routes (including the visdom websocket,
+    which cannot send Authorization headers) via an auth_request subrequest."""
+    response.set_cookie(
+        key="session_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+
+
 @router.post("/login", response_model=Token)
 def login(
     response: Response,
@@ -167,6 +183,7 @@ def login(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",  # scope cookie to auth endpoints
     )
+    _set_session_cookie(response, access_token)
 
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -225,6 +242,7 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/api/v1/auth",
     )
+    _set_session_cookie(response, new_access_token)
 
     return {"access_token": new_access_token, "token_type": "bearer"}
 
@@ -233,7 +251,34 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
 def logout(response: Response):
     """Deletes the refresh token cookie, terminating the session."""
     response.delete_cookie(key="refresh_token", path="/api/v1/auth")
+    response.delete_cookie(key="session_token", path="/")
     return {"detail": "Successfully logged out"}
+
+
+@router.get("/verify")
+def verify_session(request: Request, db: Session = Depends(get_db)):
+    """auth_request target for the nginx reverse proxy. Returns 200 when the
+    caller presents either a valid `session_token` cookie (browser read path) or
+    a valid `X-API-KEY` (programmatic write path), and 401 otherwise. This is a
+    coarse "is this a legitimate caller?" gate; the precise workspace + role check
+    is done separately by the visdom resolve endpoints. The cookie path is
+    stateless; only the API-key path touches the DB."""
+    token = request.cookies.get("session_token")
+    if token:
+        try:
+            payload = decode_token(token)
+            if payload.get("sub") is not None and payload.get("type") == "access":
+                return {"status": "ok", "auth": "session"}
+        except jwt.PyJWTError:
+            pass
+
+    if resolve_active_api_key(db, request.headers.get("X-API-KEY")) is not None:
+        return {"status": "ok", "auth": "api_key"}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No valid session or API key.",
+    )
 
 
 @router.get("/me", response_model=UserResponse)

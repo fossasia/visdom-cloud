@@ -1,0 +1,63 @@
+# Full visdom-cloud stack. Every credential, port, and URL is supplied from the
+# environment (copy .env.docker.example to .env and edit that one file) — nothing
+# is hardcoded here, so swapping config is a single-file change.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    build:
+      context: ./gateway
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      FRONTEND_URL: ${FRONTEND_URL}
+      PORT: ${GATEWAY_PORT}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  visdom:
+    build:
+      context: ${VISDOM_CONTEXT}
+    environment:
+      VISDOM_PORT: ${VISDOM_PORT}
+      VISDOM_BASE_URL: ${VISDOM_BASE_URL}
+      VISDOM_ENV_PATH: ${VISDOM_ENV_PATH}
+      VISDOM_GATEWAY_URL: http://gateway:${GATEWAY_PORT}
+    volumes:
+      - visdom_data:${VISDOM_ENV_PATH}
+    depends_on:
+      - gateway
+
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/proxy.Dockerfile
+    environment:
+      NGINX_PORT: ${NGINX_PORT}
+      GATEWAY_HOST: gateway
+      GATEWAY_PORT: ${GATEWAY_PORT}
+      VISDOM_HOST: visdom
+      VISDOM_PORT: ${VISDOM_PORT}
+    ports:
+      - "${PUBLIC_PORT}:${NGINX_PORT}"
+    depends_on:
+      - gateway
+      - visdom
+
+volumes:
+  db_data:
+  visdom_data:
