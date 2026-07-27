@@ -1,6 +1,7 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import ModalPortal from '../components/ModalPortal';
+import PasswordInput from '../components/PasswordInput';
 
 const ConfirmContext = createContext(null);
 
@@ -82,15 +83,26 @@ export const ConfirmProvider = ({ children }) => {
             {state.input && (
               <div className="gc-field">
                 {state.inputLabel && <label className="gc-label">{state.inputLabel}</label>}
-                <input
-                  autoFocus
-                  type={state.inputType}
-                  className="gc-input"
-                  placeholder={state.placeholder}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  autoComplete="off"
-                />
+                {state.inputType === 'password' ? (
+                  <PasswordInput
+                    autoFocus
+                    className="gc-input"
+                    placeholder={state.placeholder}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    autoComplete="off"
+                  />
+                ) : (
+                  <input
+                    autoFocus
+                    type={state.inputType}
+                    className="gc-input"
+                    placeholder={state.placeholder}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    autoComplete="off"
+                  />
+                )}
               </div>
             )}
 

@@ -321,3 +321,10 @@
 .gc-text-blue {
   color: var(--vc-blue);
 }
+
+.gc-raw-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
