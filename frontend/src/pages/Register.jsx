@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { useAuth, api } from '../context/AuthContext';
+import PasswordInput from '../components/PasswordInput';
 
 const USERNAME_PATTERN = /^[a-z0-9_-]{3,30}$/;
 
@@ -272,10 +273,9 @@ fetchSuggestion();
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="visdom-input"
+              autoComplete="new-password"
               placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -286,10 +286,9 @@ fetchSuggestion();
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Confirm Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="visdom-input"
+              autoComplete="new-password"
               placeholder="Re-enter password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

@@ -4,6 +4,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -19,6 +20,7 @@ services:
   gateway:
     build:
       context: ./gateway
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
@@ -32,6 +34,7 @@ services:
   visdom:
     build:
       context: ${VISDOM_CONTEXT}
+    restart: unless-stopped
     environment:
       VISDOM_PORT: ${VISDOM_PORT}
       VISDOM_BASE_URL: ${VISDOM_BASE_URL}
@@ -46,6 +49,7 @@ services:
     build:
       context: .
       dockerfile: deploy/proxy.Dockerfile
+    restart: unless-stopped
     environment:
       NGINX_PORT: ${NGINX_PORT}
       GATEWAY_HOST: gateway

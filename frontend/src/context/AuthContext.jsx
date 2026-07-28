@@ -1,8 +1,15 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { clearAppStorage } from '../utils/storage';
+import { clearRequestCache } from '../utils/requestCache';
 
 const AuthContext = createContext(null);
+
+const resetClientState = () => {
+  clearAppStorage();
+  clearRequestCache();
+};
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const api = axios.create({
@@ -48,6 +55,7 @@ export const AuthProvider = ({ children }) => {
             originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
             return api(originalRequest);
           } catch (refreshError) {
+            resetClientState();
             setAccessToken(null);
             setUser(null);
             return Promise.reject(refreshError);
@@ -85,6 +93,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    resetClientState();
+
     const params = new URLSearchParams();
     params.append('username', email);
     params.append('password', password);
@@ -115,6 +125,7 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {  
       console.error('Logout error', e);
     } finally {
+      resetClientState();
       setAccessToken(null);
       setUser(null);
     }

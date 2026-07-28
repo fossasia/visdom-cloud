@@ -772,3 +772,33 @@ body {
 .key-item:last-child {
   margin-bottom: 0;
 }
+
+.pw-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pw-field-input {
+  padding-right: 32px;
+}
+
+.pw-field-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+.pw-field-toggle:hover {
+  color: var(--text-primary);
+}

@@ -5,6 +5,7 @@ import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useToast } from '../toast/useToast';
 import InviteMemberModal from './InviteMemberModal';
+import { cachedGet, invalidate } from '../../utils/requestCache';
 import { ROLE_BADGE, parseApiError } from '../../utils/helpers';
 
 const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
@@ -15,10 +16,11 @@ const MembersTab = ({ workspaceId, currentUserId, isAdmin, ownerId }) => {
   const toast = useToast();
 
   const fetchMembers = useCallback(async () => {
+    const key = `/workspaces/${workspaceId}/members`;
     setLoading(true);
     try {
-      const response = await api.get(`/workspaces/${workspaceId}/members`);
-      setMembers(response.data);
+      const data = await cachedGet(key, () => api.get(key).then((res) => res.data));
+      setMembers(data);
     } catch (err) {
       console.error('Error fetching members', err);
     } finally {
@@ -33,12 +35,14 @@ fetchMembers();
 
   const handleInvited = (member) => {
     setShowInvite(false);
+    invalidate(`/workspaces/${workspaceId}/members`);
     setMembers((prev) => [...prev, member]);
   };
 
   const handleRoleChange = async (userId, role) => {
     try {
       const response = await api.put(`/workspaces/${workspaceId}/members/${userId}`, { role });
+      invalidate(`/workspaces/${workspaceId}/members`);
       setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
       toast.success('Role updated.');
     } catch (err) {
@@ -57,6 +61,7 @@ fetchMembers();
 
     try {
       await api.delete(`/workspaces/${workspaceId}/members/${userId}`);
+      invalidate(`/workspaces/${workspaceId}/members`);
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
       toast.success('Member removed.');
     } catch (err) {
@@ -79,6 +84,7 @@ fetchMembers();
       } else {
         await api.delete(`/workspaces/${workspaceId}/members/${member.user_id}`);
       }
+      invalidate(`/workspaces/${workspaceId}/members`);
       setMembers((prev) => prev.filter((m) => m !== member));
       toast.success(opts.successMessage);
     } catch (err) {
@@ -89,6 +95,7 @@ fetchMembers();
   const handleApprove = async (userId) => {
     try {
       const response = await api.post(`/workspaces/${workspaceId}/members/${userId}/approve`);
+      invalidate(`/workspaces/${workspaceId}/members`);
       setMembers((prev) => prev.map((m) => (m.user_id === userId ? response.data : m)));
       toast.success('Request approved.');
     } catch (err) {

@@ -1,9 +1,11 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, Key, Plus, Terminal, Trash2, X } from 'lucide-react';
+import { Check, Copy, Download, Key, Plus, Terminal, Trash2, X } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useToast } from '../toast/useToast';
+import { copyToClipboard, downloadTextFile } from '../../utils/clipboard';
+import { cachedGet, invalidate } from '../../utils/requestCache';
 import { EXPIRY_PRESETS, describeExpiry, parseApiError, resolveExpiresAt } from '../../utils/helpers';
 
 const KeysTab = ({ workspaces = [] }) => {
@@ -20,11 +22,11 @@ const KeysTab = ({ workspaces = [] }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchKeys = useCallback(async () => {
+  const fetchKeys = useCallback(async (force = false) => {
     try {
-      const response = await api.get('/keys');
-      setKeys(response.data);
-    } catch (err) {  
+      const data = await cachedGet('/keys', () => api.get('/keys').then((res) => res.data), { force });
+      setKeys(data);
+    } catch (err) {
       console.error('Error fetching API keys', err);
     }
   }, []);
@@ -65,9 +67,10 @@ fetchKeys();
       setSelectedWorkspaceIds([]);
       setExpiryPreset('none');
       setCustomExpiresAt('');
-           
-fetchKeys();
-    } catch (err) {  
+
+      invalidate('/keys');
+      fetchKeys(true);
+    } catch (err) {
       setError(parseApiError(err, 'Failed to create API key.'));
     } finally {
       setSubmitting(false);
@@ -85,19 +88,47 @@ fetchKeys();
 
     try {
       await api.delete(`/keys/${id}`);
-           
-fetchKeys();
+      invalidate('/keys');
+      fetchKeys(true);
       toast.success('API key revoked.');
     } catch (err) { // eslint-disable-line no-unused-vars
       toast.error('Failed to revoke API key.');
     }
   };
 
-  const handleCopyKey = () => {
+  const handleCopyKey = async () => {
     if (!newRawKey) return;
-    navigator.clipboard.writeText(newRawKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+    const ok = await copyToClipboard(newRawKey);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('API key copied to clipboard.');
+    } else {
+      toast.error('Could not copy automatically — select the key and copy it manually.');
+    }
+  };
+
+  const handleDownloadKey = () => {
+    if (!newRawKey) return;
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const contents = [
+      'Visdom Cloud API key',
+      '',
+      `Key:       ${newRawKey}`,
+      `Generated: ${new Date().toISOString()}`,
+      '',
+      'Keep this file secret. This key is shown only once and cannot be recovered.',
+      'If it leaks, revoke it from the Keys & API tab and generate a new one.',
+      '',
+    ].join('\n');
+
+    if (downloadTextFile(`visdom-api-key-${stamp}.txt`, contents)) {
+      toast.success('API key downloaded.');
+    } else {
+      toast.error('Failed to download the API key.');
+    }
   };
 
   return (
@@ -236,13 +267,26 @@ fetchKeys();
             </div>
             <div className="gc-raw-key-box">
               <span>{newRawKey}</span>
-              <button
-                onClick={handleCopyKey}
-                className="gc-btn-unstyled-flex"
-                type="button"
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-              </button>
+              <div className="gc-raw-key-actions">
+                <button
+                  onClick={handleDownloadKey}
+                  className="gc-btn-unstyled-flex"
+                  type="button"
+                  title="Download key as .txt"
+                  aria-label="Download key as a text file"
+                >
+                  <Download size={14} />
+                </button>
+                <button
+                  onClick={handleCopyKey}
+                  className="gc-btn-unstyled-flex"
+                  type="button"
+                  title="Copy key to clipboard"
+                  aria-label="Copy key to clipboard"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                </button>
+              </div>
             </div>
           </div>
         )}
