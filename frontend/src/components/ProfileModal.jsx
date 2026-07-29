@@ -6,7 +6,7 @@ import { useToast } from './toast/useToast';
 import { parseApiError } from '../utils/helpers';
 import ModalPortal from './ModalPortal';
 
-const USERNAME_PATTERN = /^[a-z0-9_-]{3,30}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,30}$/;
 
 const ProfileModal = ({ onClose }) => {
   const { user, setUser } = useAuth();
@@ -89,7 +89,7 @@ const ProfileModal = ({ onClose }) => {
             type="text"
             className="gc-input"
             value={username}
-            onChange={(e) => setUsername(e.target.value.trim().toLowerCase())}
+            onChange={(e) => setUsername(e.target.value.trim())}
             autoComplete="off"
             spellCheck={false}
           />
@@ -97,7 +97,7 @@ const ProfileModal = ({ onClose }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
               {!USERNAME_PATTERN.test(username) ? (
                 <span style={{ color: 'var(--danger-bg)' }}>
-                  3-30 characters: lowercase letters, numbers, underscores, hyphens.
+                  3-30 characters: letters, numbers, underscores, hyphens.
                 </span>
               ) : checkingUsername ? (
                 <span style={{ color: 'var(--text-muted)' }}>Checking availability...</span>

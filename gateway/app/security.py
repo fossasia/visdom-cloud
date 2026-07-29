@@ -60,6 +60,16 @@ def create_refresh_token(data: dict, expires_delta: Optional[datetime.timedelta]
     return encoded_jwt
 
 
+def session_claims(user) -> Dict[str, Any]:
+    """Builds the JWT claim set identifying a user's current session generation."""
+    return {"sub": str(user.id), "tv": user.token_version or 0}
+
+
+def claims_match_user(payload: Dict[str, Any], user) -> bool:
+    """True when a decoded token belongs to the user's current session generation."""
+    return payload.get("tv") == (user.token_version or 0)
+
+
 def decode_token(token: str) -> Dict[str, Any]:
     """Decodes a JWT and verifies signature/expiration. Raises PyJWTError if invalid."""
     return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])

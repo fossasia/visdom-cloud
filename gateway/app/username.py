@@ -5,16 +5,19 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Username validation and generation helpers. Usernames are lowercase,
-3-30 chars, and may contain letters, digits, underscores, and hyphens.
+Username validation and generation helpers. Usernames are 3-30 chars and may
+contain letters (either case), digits, underscores, and hyphens. The stored form
+preserves the case the user typed; uniqueness is enforced case-insensitively, so
+"Vedansh" and "vedansh" are the same username.
 """
 
 import re
 import secrets
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-USERNAME_PATTERN = re.compile(r"^[a-z0-9_-]{3,30}$")
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{3,30}$")
 
 _ADJECTIVES = [
     "swift", "brave", "clever", "quiet", "bright", "calm", "bold", "sunny",
@@ -30,12 +33,28 @@ _NOUNS = [
 
 
 def normalize_username(raw: str) -> str:
-    """Lowercases and strips a username so equivalent inputs compare equal."""
+    """Strips surrounding whitespace, preserving the case the user chose."""
+    return raw.strip()
+
+
+def canonical_username(raw: str) -> str:
+    """Case-folded form used for uniqueness comparisons only, never for storage."""
     return raw.strip().lower()
 
 
 def is_valid_username_format(username: str) -> bool:
     return bool(USERNAME_PATTERN.match(username))
+
+
+def find_user_by_username(db: Session, username: str):
+    """Looks a user up by username, ignoring case."""
+    from app.models import User
+
+    return (
+        db.query(User)
+        .filter(func.lower(User.username) == canonical_username(username))
+        .first()
+    )
 
 
 def _slugify_seed(seed: str) -> str:
@@ -56,14 +75,11 @@ def _random_candidate(seed: str | None) -> str:
 
 def generate_unique_username(db: Session, seed: str | None = None) -> str:
     """Generates a username guaranteed not to collide with an existing row."""
-    from app.models import User
-
     for _ in range(20):
         candidate = _random_candidate(seed)
         if not is_valid_username_format(candidate):
             continue
-        exists = db.query(User).filter(User.username == candidate).first()
-        if not exists:
+        if not find_user_by_username(db, candidate):
             return candidate
 
     return f"user-{secrets.token_hex(6)}"

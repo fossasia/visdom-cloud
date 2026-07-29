@@ -228,6 +228,7 @@ body {
   height: 100vh;
   padding: 18px 14px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .gc-logo {
@@ -245,6 +246,23 @@ body {
   gap: 2px;
   flex: 1;
   margin-top: 22px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .gc-sidebar-footer {
@@ -254,6 +272,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .gc-sidebar-user {

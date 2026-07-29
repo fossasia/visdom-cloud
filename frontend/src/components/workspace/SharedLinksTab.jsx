@@ -8,6 +8,8 @@ import { copyToClipboard } from '../../utils/clipboard';
 import { cachedGet, invalidate } from '../../utils/requestCache';
 import { EXPIRY_PRESETS, ROLE_BADGE, parseApiError, resolveExpiresAt } from '../../utils/helpers';
 
+const shareUrl = (linkId) => `${window.location.origin}/share/${linkId}`;
+
 const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   const confirm = useConfirm();
   const toast = useToast();
@@ -85,8 +87,7 @@ fetchLinks();
   };
 
   const handleCopy = async (link) => {
-    const url = `${window.location.origin}/share/${link.id}`;
-    const ok = await copyToClipboard(url);
+    const ok = await copyToClipboard(shareUrl(link.id));
     if (ok) {
       setCopiedId(link.id);
       setTimeout(() => setCopiedId(null), 2000);
@@ -189,7 +190,7 @@ fetchLinks();
             <div key={link.id} className="gc-row">
               <div className="gc-min-w-0">
                 <div className="gc-row-main gc-font-mono-small">
-                  /share/{link.id}
+                  {shareUrl(link.id)}
                 </div>
                 <div className="gc-row-meta">
                   <span className={`gc-badge ${ROLE_BADGE[link.role] || 'gc-badge-member'}`}>Joins as {link.role}</span>

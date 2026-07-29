@@ -84,8 +84,27 @@ def test_update_username(client, make_user):
     assert collision.status_code == 400
     assert collision.json()["detail"] == "This username is already taken."
 
+    case_collision = client.patch(
+        f"{AUTH}/me/username",
+        json={"username": other["username"].upper()},
+        headers=user["headers"],
+    )
+    assert case_collision.status_code == 400
+
+    mixed_case = client.patch(
+        f"{AUTH}/me/username", json={"username": "Vedansh-Saini"}, headers=user["headers"]
+    )
+    assert mixed_case.status_code == 200
+    assert mixed_case.json()["username"] == "Vedansh-Saini"
+
+    recased = client.patch(
+        f"{AUTH}/me/username", json={"username": "VEDANSH-SAINI"}, headers=user["headers"]
+    )
+    assert recased.status_code == 200
+    assert recased.json()["username"] == "VEDANSH-SAINI"
+
     invalid = client.patch(
-        f"{AUTH}/me/username", json={"username": "NO CAPS ALLOWED"}, headers=user["headers"]
+        f"{AUTH}/me/username", json={"username": "no spaces allowed"}, headers=user["headers"]
     )
     assert invalid.status_code == 422
 

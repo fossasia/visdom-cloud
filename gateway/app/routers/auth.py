@@ -8,6 +8,7 @@ import uuid
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -28,13 +29,16 @@ from app.schemas import (
     UserResponse,
 )
 from app.security import (
+    claims_match_user,
     create_access_token,
     create_refresh_token,
     decode_token,
     get_password_hash,
+    session_claims,
     verify_password,
 )
 from app.username import (
+    find_user_by_username,
     generate_unique_username,
     is_valid_username_format,
     normalize_username,
@@ -55,7 +59,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 
     if user_in.username:
         username = normalize_username(user_in.username)
-        if db.query(User).filter(User.username == username).first():
+        if find_user_by_username(db, username):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="This username is already taken.",
@@ -67,7 +71,14 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     new_user = User(email=email, username=username, password_hash=hashed_pwd)
 
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That email or username was just taken. Please try again.",
+        ) from None
     db.refresh(new_user)
 
     pending_invites = db.query(WorkspaceInvite).filter(WorkspaceInvite.email == new_user.email).all()
@@ -94,8 +105,7 @@ def check_username_availability(username: str, db: Session = Depends(get_db)):
     if not is_valid_username_format(normalized):
         return {"available": False}
 
-    exists = db.query(User).filter(User.username == normalized).first()
-    return {"available": exists is None}
+    return {"available": find_user_by_username(db, normalized) is None}
 
 
 @router.get("/generate-username", response_model=GeneratedUsernameResponse)
@@ -116,15 +126,22 @@ def update_username(
     if username == current_user.username:
         return current_user
 
-    existing = db.query(User).filter(User.username == username).first()
-    if existing:
+    existing = find_user_by_username(db, username)
+    if existing and existing.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This username is already taken.",
         )
 
     current_user.username = username
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That username was just taken. Please choose another.",
+        ) from None
     db.refresh(current_user)
     return current_user
 
@@ -169,9 +186,9 @@ def login(
         )
 
     # generate token payloads
-    user_id_str = str(user.id)
-    access_token = create_access_token(data={"sub": user_id_str})
-    refresh_token = create_refresh_token(data={"sub": user_id_str})
+    claims = session_claims(user)
+    access_token = create_access_token(data=claims)
+    refresh_token = create_refresh_token(data=claims)
 
     # set refresh token cookie
     response.set_cookie(
@@ -229,9 +246,16 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
             detail="User associated with this token is inactive or does not exist."
         )
 
+    if not claims_match_user(payload, user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This session has been logged out.",
+        )
+
     # Rotate both access and refresh tokens
-    new_access_token = create_access_token(data={"sub": user_id_str})
-    new_refresh_token = create_refresh_token(data={"sub": user_id_str})
+    claims = session_claims(user)
+    new_access_token = create_access_token(data=claims)
+    new_refresh_token = create_refresh_token(data=claims)
 
     response.set_cookie(
         key="refresh_token",
@@ -248,8 +272,25 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
 
 
 @router.post("/logout")
-def logout(response: Response):
-    """Deletes the refresh token cookie, terminating the session."""
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Clears the session cookies and revokes refresh tokens already issued."""
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token)
+            user_id = uuid.UUID(payload.get("sub"))
+        except (jwt.PyJWTError, TypeError, ValueError):
+            user_id = None
+
+        if user_id is not None:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is not None:
+                user.token_version = (user.token_version or 0) + 1
+                try:
+                    db.commit()
+                except SQLAlchemyError:
+                    db.rollback()
+
     response.delete_cookie(key="refresh_token", path="/api/v1/auth")
     response.delete_cookie(key="session_token", path="/")
     return {"detail": "Successfully logged out"}
