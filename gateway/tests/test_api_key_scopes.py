@@ -135,7 +135,7 @@ def test_expired_key_rejected(client, make_user):
     for key in (expired, naive_expired):
         response = client.get(KEY_CHECK, headers={"X-API-KEY": key["raw_key"]})
         assert response.status_code == 401
-        assert response.json()["detail"] == "API key has expired."
+        assert response.json()["detail"] == "Invalid, expired, or inactive API key."
 
     ok = client.get(KEY_CHECK, headers={"X-API-KEY": fresh["raw_key"]})
     assert ok.status_code == 200
