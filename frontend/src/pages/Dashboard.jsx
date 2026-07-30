@@ -1,7 +1,7 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth, api } from '../context/AuthContext';
-import { Building2, CreditCard, ExternalLink, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
+import { Building2, CreditCard, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
 import WorkspaceSettingsTab from '../components/workspace/WorkspaceSettingsTab';
 import MembersTab from '../components/workspace/MembersTab';
@@ -150,21 +150,18 @@ fetchWorkspaces();
           <a
             className="gc-tab gc-tab-viz"
             href={activeWorkspace ? `/vis/w/${activeWorkspace.slug}/` : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
             aria-disabled={!activeWorkspace}
             onClick={(e) => {
               if (!activeWorkspace) e.preventDefault();
             }}
             title={
               activeWorkspace
-                ? `Open ${activeWorkspace.name}'s visualizations in a new tab`
+                ? `Open ${activeWorkspace.name}'s visualizations`
                 : 'Select a workspace to open its visualizations'
             }
           >
             <LineChart size={15} />
             <span>Visualizations</span>
-            <ExternalLink size={12} className="gc-tab-ext" />
           </a>
         </nav>
 
