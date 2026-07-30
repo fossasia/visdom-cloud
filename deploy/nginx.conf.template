@@ -6,6 +6,9 @@
 #
 # This block is included inside the base image's http{}.
 
+proxy_cache_path /var/cache/nginx/auth levels=1:2 keys_zone=auth_cache:1m
+                 max_size=10m inactive=60s use_temp_path=off;
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
@@ -60,6 +63,14 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Cookie $http_cookie;
         proxy_set_header X-API-KEY $http_x_api_key;
+
+        # Keyed on the credential alone; the gate reads nothing else.
+        proxy_cache auth_cache;
+        proxy_cache_key "$cookie_session_token|$http_x_api_key";
+        proxy_cache_valid 200 30s;
+        proxy_cache_valid 401 403 5s;
+        proxy_ignore_headers Set-Cookie Cache-Control Expires;
+        proxy_hide_header Set-Cookie;
     }
 
     # Browser read path: /vis/w/<slug>/... — inject the workspace from the URL.
