@@ -532,6 +532,12 @@ def join_via_shared_link(
         if link_expires < utcnow():
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="This shared link has expired.")
 
+    if link.invite_email and link.invite_email != current_user.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invite was issued to a different email address.",
+        )
+
     if link.password_hash:
         if not join_in.password:
             raise HTTPException(

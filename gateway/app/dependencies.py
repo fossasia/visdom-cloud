@@ -17,12 +17,13 @@ from typing import Generator
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import APIKey, Membership, User, utcnow
 from app.schemas import TokenPayload
-from app.security import decode_token
+from app.security import claims_match_user, decode_token
 
 # OAuth2 scheme looking for JWT tokens in the Authorization header
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
@@ -78,6 +79,9 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
+    if not claims_match_user(payload, user):
+        raise credentials_exception
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -85,6 +89,26 @@ def get_current_user(
         )
 
     return user
+
+
+LAST_USED_THROTTLE = datetime.timedelta(seconds=60)
+
+
+def _touch_last_used(db: Session, key_record: APIKey) -> None:
+    """Stamps last_used_at, at most once per throttle window."""
+    now = utcnow()
+    previous = key_record.last_used_at
+    if previous is not None:
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=datetime.timezone.utc)
+        if now - previous < LAST_USED_THROTTLE:
+            return
+
+    key_record.last_used_at = now
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
 
 
 def resolve_active_api_key(db: Session, raw_key: str | None) -> APIKey | None:
@@ -109,6 +133,7 @@ def resolve_active_api_key(db: Session, raw_key: str | None) -> APIKey | None:
             return None
     if not key_record.owner or not key_record.owner.is_active:
         return None
+    _touch_last_used(db, key_record)
     return key_record
 
 

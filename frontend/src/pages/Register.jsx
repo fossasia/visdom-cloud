@@ -5,7 +5,7 @@ import { Check, RefreshCw, X } from 'lucide-react';
 import { useAuth, api } from '../context/AuthContext';
 import PasswordInput from '../components/PasswordInput';
 
-const USERNAME_PATTERN = /^[a-z0-9_-]{3,30}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,30}$/;
 
 const Register = () => {
   const [email, setEmail] = useState('');
@@ -242,7 +242,7 @@ fetchSuggestion();
                   className="visdom-input"
                   placeholder="your_username"
                   value={customUsername}
-                  onChange={(e) => setCustomUsername(e.target.value.toLowerCase())}
+                  onChange={(e) => setCustomUsername(e.target.value.trimStart())}
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -250,7 +250,7 @@ fetchSuggestion();
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
                     {!USERNAME_PATTERN.test(customUsername) ? (
                       <span style={{ color: 'var(--danger-bg)' }}>
-                        3-30 characters: lowercase letters, numbers, underscores, hyphens.
+                        3-30 characters: letters, numbers, underscores, hyphens.
                       </span>
                     ) : checkingUsername ? (
                       <span style={{ color: 'var(--text-muted)' }}>Checking availability...</span>
