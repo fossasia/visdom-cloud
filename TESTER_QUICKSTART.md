@@ -4,23 +4,28 @@ A hosted, multi-tenant visdom for live experiment visualization. Your training
 code runs on **your** machine and streams plots to a shared server; you view them
 in the browser. Everything is isolated per **workspace**.
 
-> Replace `visdom-test.<your-domain>` below with the real deployment URL.
-
 ## 1. Make an account + workspace
-1. Open **https://visdom-test.<your-domain>** and **Register** (or log in).
+1. Open **https://visdom-cloud-test.duckdns.org** and **Register** (or log in).
 2. Create a **workspace** — note its **slug** (e.g. `team-alpha`).
 
 ## 2. Get an API key
-- In the console, open the **Keys** tab → **Create key**.
-- Copy it now — it is shown only once. (Org-scoped works for any of your
-  workspaces; workspace-scoped is bound to one.)
+- In the console, open the **Keys & API** tab → **Generate**.
+- Copy or download it now — it is shown only once. (Org-scoped works for any of
+  your workspaces; workspace-scoped is bound to one.)
 
 ## 3. Install the client
-The hosted server needs the client that sends your key + workspace:
+The hosted server needs the client that sends your key + workspace. Install it
+into a fresh virtualenv so it can't clash with anything already on your machine:
 ```bash
+python3 -m venv ~/.venvs/visdom-client
+source ~/.venvs/visdom-client/bin/activate
 pip install "git+https://github.com/vedansh-5/visdom.git@dev"
 ```
 > Plain `pip install visdom` will **not** work here — it has no key/workspace support.
+
+> **Already installed it before?** The `dev` branch has since been rebased onto
+> upstream, so an older install is stale. Reinstall to pick up the current client:
+> `pip install --force-reinstall "git+https://github.com/vedansh-5/visdom.git@dev"`
 
 ## 4. Send some plots — this is how an "environment" is created
 An **environment** is created automatically the first time you write to it. There
@@ -30,7 +35,7 @@ your own code.
 import visdom
 
 vis = visdom.Visdom(
-    server="https://visdom-test.<your-domain>", port=443, base_url="/vis",
+    server="https://visdom-cloud-test.duckdns.org", port=443, base_url="/vis",
     api_key="visdom_live_...",   # your key from step 2
     workspace="team-alpha",      # your workspace slug (required when a key is set)
 )
@@ -49,7 +54,8 @@ visdom UI at `/vis/w/team-alpha/`, and **experiment-1** appears in the environme
 list, updating live. You only ever see your own workspace's environments.
 
 ## Troubleshooting
-- **401 / "invalid key"** — key typo or it was revoked. Regenerate in the Keys tab.
+- **401 / "invalid key"** — key typo or it was revoked. Regenerate in the
+  **Keys & API** tab.
 - **"workspace is required"** — you set `api_key` but not `workspace`; add the slug.
 - **Nothing shows in the UI** — confirm you opened *your* workspace's link
   (`/vis/w/<your-slug>/`) and that the script printed no errors.
