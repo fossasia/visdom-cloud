@@ -4,6 +4,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { useAuth, api } from '../context/AuthContext';
 import PasswordInput from '../components/PasswordInput';
+import { resolvePostAuthTarget, redirectAfterAuth } from '../utils/helpers';
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,30}$/;
 
@@ -25,7 +26,7 @@ const Register = () => {
   const { register, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from || '/';
+  const from = resolvePostAuthTarget(location);
 
   const fetchSuggestion = async (seed) => {
     setAutoUsernameLoading(true);
@@ -102,7 +103,7 @@ fetchSuggestion();
       await register(email, password, finalUsername);
       setSuccess('Account created! Logging you in...');
       await login(email, password);
-      navigate(from, { replace: true });
+      redirectAfterAuth(from, navigate);
     } catch (err) {  
       const detail = err.response?.data?.detail;
       let errorMsg = 'Registration failed. Please try again.';
@@ -309,7 +310,7 @@ fetchSuggestion();
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
           Already have an account?{' '}
-          <Link to="/login" state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
+          <Link to={`/login${location.search}`} state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
             Sign in
           </Link>
         </div>

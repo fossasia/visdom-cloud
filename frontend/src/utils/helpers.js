@@ -17,6 +17,24 @@ export const parseApiError = (err, defaultMsg = 'An error occurred.') => {
   return defaultMsg;
 };
 
+const PROXIED_PREFIX = '/vis/';
+
+const isSameOriginPath = (path) => /^\/(?![/\\])/.test(path);
+
+export const resolvePostAuthTarget = (location) => {
+  const next = new URLSearchParams(location.search).get('next');
+  if (next && isSameOriginPath(next)) return next;
+  return location.state?.from || '/';
+};
+
+export const redirectAfterAuth = (target, navigate) => {
+  if (target.startsWith(PROXIED_PREFIX)) {
+    window.location.assign(target);
+    return;
+  }
+  navigate(target, { replace: true });
+};
+
 export const EXPIRY_PRESETS = [
   { value: 'none', label: 'No expiration' },
   { value: '7', label: '7 days' },
