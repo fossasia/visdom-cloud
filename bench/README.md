@@ -87,10 +87,18 @@ docker compose --profile bench run --rm -T bench \
 A partial `setup` still prints its manifest, so a run that dies halfway is recoverable
 rather than orphaned.
 
-The first `build` takes a few minutes on ARM: the client is installed from the fork's
-`dev` branch, not PyPI, because `api_key=` and `workspace=` are additions this project
-made and do not exist upstream. That also keeps the client's auth protocol in step with
-the server it is measuring — rebuild the bench image whenever you rebuild visdom.
+The client is installed from the fork's `dev` branch, not PyPI, because `api_key=` and
+`workspace=` are additions this project made and do not exist upstream. That also keeps
+the client's auth protocol in step with the server it is measuring — **rebuild the bench
+image whenever you rebuild visdom.** Pin a different commit with
+`--build-arg VISDOM_REF=<sha>`.
+
+It installs with `--no-deps`: `setup.py` declares the *server's* dependencies, and
+openTSNE among them has no aarch64 wheel and needs a C++ toolchain the slim image lacks.
+The client's hard imports are the four in `requirements.txt`; openTSNE sits behind a
+`try/except ImportError` that only raises if `do_tsne()` is called, which the write path
+never does. The build asserts the client imports and carries `api_key=`, so a wrong build
+fails there rather than mid-benchmark.
 
 Results land in `results/<date>-write-<kind>.csv`, one row per concurrency level, plus a
 per-second raw sample directory alongside. `results/` is git-ignored.

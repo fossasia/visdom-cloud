@@ -1,7 +1,4 @@
 numpy==2.1.3
 requests==2.32.3
 websocket-client==1.8.0
-
-# The client must come from the fork, not PyPI: api_key= and workspace= are additions
-# made in this project and do not exist upstream. Same branch the server is built from.
-visdom @ git+https://github.com/vedansh-5/visdom.git@dev
+pillow==12.3.0

@@ -9,6 +9,19 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# The client must come from the fork, not PyPI: api_key= and workspace= are additions
+# made in this project and do not exist upstream. --no-deps because setup.py declares the
+# *server's* dependencies, and openTSNE among them has no aarch64 wheel and needs a C++
+# toolchain to build. The client's own hard imports are the four in requirements.txt;
+# openTSNE sits behind a try/except that only raises if do_tsne() is called.
+ARG VISDOM_REPO=https://github.com/vedansh-5/visdom.git
+ARG VISDOM_REF=dev
+RUN pip install --no-cache-dir --no-deps "visdom @ git+${VISDOM_REPO}@${VISDOM_REF}"
+
+RUN python -c "import visdom, numpy, requests, websocket; from PIL import Image; \
+import inspect; assert 'api_key' in inspect.signature(visdom.Visdom.__init__).parameters, \
+'client lacks api_key= — wrong visdom build'; print('client ok', visdom.__version__)"
+
 COPY . .
 
 CMD ["python", "writebench.py"]
