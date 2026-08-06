@@ -92,9 +92,24 @@ def headers(target):
     return {"X-API-KEY": target[0], "X-Visdom-Workspace": target[1]}
 
 
+class CheckedVisdom(visdom.Visdom):
+    """The stock client's _handle_post returns r.text without looking at the status, and
+    raise_exceptions only covers transport errors, so an HTTP 401/403/500 is indexed as a
+    successful write. That would let a run of denials report throughput — the failure
+    BENCHMARKING.md trap 1 describes. Raise on any non-200 instead."""
+
+    def _handle_post(self, url, data=None):
+        response = self.session.post(url, data=data or {}, timeout=(20, None))
+        if response.status_code != 200:
+            raise RuntimeError(
+                "POST %s -> %d: %s" % (url, response.status_code, response.text[:300])
+            )
+        return response.text
+
+
 def client_for(target):
     key, workspace = target
-    return visdom.Visdom(
+    return CheckedVisdom(
         server=SERVER,
         port=PORT,
         base_url=BASE_URL,
@@ -141,9 +156,11 @@ def verify_landed(cfg):
                 "writebench: post-run env listing failed (%s: %s)" % (type(exc).__name__, exc)
             )
         if expected not in envs:
+            target = cfg["targets"][index]
             sys.exit(
-                "writebench: env %r is absent after the run; the server lists %r. A run that "
-                "wrote nothing is not a data point." % (expected, sorted(envs)[:5])
+                "writebench: env %r is absent after the run; the server lists %r for "
+                "workspace %r. A run that wrote nothing is not a data point."
+                % (expected, sorted(envs)[:8], target[1])
             )
 
 
