@@ -146,17 +146,31 @@ def preflight(cfg):
             )
 
 
+def list_envs(target):
+    """Post env_state directly rather than via the client's get_env_list().
+
+    _send() fills in a missing eid with the client's current env, so get_env_list()
+    always asks for eid="main" and EnvStateHandler answers with that env's window dict
+    instead of the env list. An empty body keeps eid absent and returns the list."""
+    url = base() + "/env_state"
+    try:
+        resp = requests.post(url, headers=headers(target), data=json.dumps({}), timeout=15)
+    except requests.RequestException as exc:
+        sys.exit("writebench: post-run env listing failed: %s" % exc)
+    if resp.status_code != 200:
+        sys.exit("writebench: post-run %s returned %d" % (url, resp.status_code))
+    envs = resp.json()
+    if not isinstance(envs, list):
+        sys.exit("writebench: %s returned %r, expected a list of env names" % (url, envs))
+    return envs
+
+
 def verify_landed(cfg):
     for index in checkpoints(cfg):
+        target = cfg["targets"][index]
         expected = "%s%d" % (cfg["tag"], index)
-        try:
-            envs = client_for(cfg["targets"][index]).get_env_list()
-        except Exception as exc:
-            sys.exit(
-                "writebench: post-run env listing failed (%s: %s)" % (type(exc).__name__, exc)
-            )
+        envs = list_envs(target)
         if expected not in envs:
-            target = cfg["targets"][index]
             sys.exit(
                 "writebench: env %r is absent after the run; the server lists %r for "
                 "workspace %r. A run that wrote nothing is not a data point."
