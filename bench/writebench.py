@@ -92,6 +92,19 @@ def headers(target):
     return {"X-API-KEY": target[0], "X-Visdom-Workspace": target[1]}
 
 
+def client_for(target):
+    key, workspace = target
+    return visdom.Visdom(
+        server=SERVER,
+        port=PORT,
+        base_url=BASE_URL,
+        api_key=key,
+        workspace=workspace,
+        use_incoming_socket=False,
+        raise_exceptions=True,
+    )
+
+
 def probe(target, path):
     url = base() + path
     try:
@@ -120,15 +133,17 @@ def preflight(cfg):
 
 def verify_landed(cfg):
     for index in checkpoints(cfg):
-        target = cfg["targets"][index]
         expected = "%s%d" % (cfg["tag"], index)
-        resp, url = probe(target, "/env")
-        if resp.status_code != 200:
-            sys.exit("writebench: post-run %s returned %d" % (url, resp.status_code))
-        if expected not in resp.text:
+        try:
+            envs = client_for(cfg["targets"][index]).get_env_list()
+        except Exception as exc:
             sys.exit(
-                "writebench: env %r is absent from %s after the run. A run that wrote "
-                "nothing is not a data point." % (expected, url)
+                "writebench: post-run env listing failed (%s: %s)" % (type(exc).__name__, exc)
+            )
+        if expected not in envs:
+            sys.exit(
+                "writebench: env %r is absent after the run; the server lists %r. A run that "
+                "wrote nothing is not a data point." % (expected, sorted(envs)[:5])
             )
 
 
@@ -142,16 +157,7 @@ def _init(cfg):
 
 def _work(n):
     cfg = _worker_cfg
-    key, workspace = cfg["targets"][n]
-    client = visdom.Visdom(
-        server=SERVER,
-        port=PORT,
-        base_url=BASE_URL,
-        api_key=key,
-        workspace=workspace,
-        use_incoming_socket=False,
-        raise_exceptions=True,
-    )
+    client = client_for(cfg["targets"][n])
     env = "%s%d" % (cfg["tag"], n)
     win = "w%d" % n
     latencies = []
