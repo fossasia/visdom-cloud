@@ -191,13 +191,21 @@ def _work(n):
     client = client_for(cfg["targets"][n])
     env = "%s%d" % (cfg["tag"], n)
     win = "w%d" % n
+
+    # Built once per worker, not per write. Generating a 3x256x256 array costs the
+    # client ~196k floats plus a base64 encode, which is enough to saturate the host
+    # before visdom is loaded at all — the run then measures the generator.
+    payload = (
+        np.random.rand(3, 256, 256) if cfg["kind"] == "image" else np.random.rand(200)
+    )
+
     latencies = []
     for _ in range(cfg["ops"]):
         started = time.perf_counter()
         if cfg["kind"] == "image":
-            client.image(np.random.rand(3, 256, 256), win=win, env=env)
+            client.image(payload, win=win, env=env)
         else:
-            client.line(Y=np.random.rand(200), win=win, env=env)
+            client.line(Y=payload, win=win, env=env)
         latencies.append(time.perf_counter() - started)
     return latencies
 
