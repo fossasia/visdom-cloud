@@ -14,6 +14,7 @@ Postgres — using the visdom python client, which is what a user's training scr
 | `sweep.sh` | VM host | orchestrates a concurrency sweep, writes `results/` |
 | `cpu_sample.py` | VM host | samples visdom / generator / host CPU into CSV |
 | `writebench.py` | `bench` container | scenario 4 — N writers |
+| `viewbench.py` | `bench` container | scenario 5 — N viewers watching one workspace |
 | `fleet.py` | `bench` container | creates and destroys 4b's throwaway workspaces and keys |
 | `Dockerfile`, `requirements.txt` | — | the generator image |
 
@@ -58,6 +59,37 @@ read -rs BENCH_PASSWORD; export BENCH_PASSWORD
 
 **4a throughput − 4b throughput at the same concurrency is the cost of the auth path**,
 and it is the number that says whether §1c is worth fixing before anything else.
+
+## Scenario 5 — viewer fan-out
+
+Every write to a workspace is serialized and pushed to each subscribed socket, so one
+write with N viewers is one store plus N sends. This is the path that decides whether
+sharding is the right axis at all: sticky routing puts every viewer of a workspace on the
+same instance by design, so a workspace with many viewers is capped by one core no matter
+how many instances exist.
+
+```bash
+./bench/sweep.sh --viewers
+BENCH_VIEWER_LEVELS="1 50 200" BENCH_RATE=20 ./bench/sweep.sh --viewers
+```
+
+N subscribers attach to `main` in the workspace, one writer sends at a fixed rate, and
+each subscriber timestamps arrival. Writer and subscribers share a process, so the
+difference is real delivery latency rather than a comparison across clocks.
+
+Writes go to `main` because `broadcast()` only reaches subscribers whose `eid` matches
+the env being written, and a freshly opened socket defaults to `main`.
+
+**The number to hunt: at what viewer count does visdom pin a core at a modest write
+rate?** If CPU scales linearly with viewers, serialize-per-subscriber is confirmed and
+the curve extrapolates. `drop_pct` above zero means the server shed broadcasts and the
+latency figures for that level understate the damage.
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `BENCH_VIEWER_LEVELS` | `1 10 25 50 100 200` | subscriber counts to sweep |
+| `BENCH_WRITES` | `50` | writes the single writer sends |
+| `BENCH_RATE` | `10` | writes per second |
 
 **Never run 4a and 4b at the same time.** They load the same server, so each becomes the
 other's noise and neither result means anything. Run them back to back.

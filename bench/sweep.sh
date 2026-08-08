@@ -31,12 +31,27 @@ PREFIX="${BENCH_PREFIX:-bench-}"
 
 FLEET=0
 SMOKE=0
+VIEWERS=0
 case "${1:-}" in
   --fleet) FLEET=1 ;;
   --smoke) SMOKE=1 ;;
+  --viewers) VIEWERS=1 ;;
   "") ;;
   *) echo "sweep: unknown argument $1" >&2; exit 2 ;;
 esac
+
+if [[ "$VIEWERS" -eq 1 ]]; then
+  LEVELS="${BENCH_VIEWER_LEVELS:-1 10 25 50 100 200}"
+  DRIVER_SCRIPT="viewbench.py"
+  LEVEL_VAR="BENCH_VIEWERS"
+  ROW_RE='^[0-9]{10},5,'
+  RESULT_HEADER="ts,scenario,viewers,writes,rate,elapsed_s,expected,delivered,drop_pct,p50_ms,p95_ms,p99_ms,max_ms,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+else
+  DRIVER_SCRIPT="writebench.py"
+  LEVEL_VAR="BENCH_CONC"
+  ROW_RE='^[0-9]{10},4[ab],'
+  RESULT_HEADER="ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+fi
 
 if [[ "$FLEET" -eq 1 ]]; then
   if [[ -z "${BENCH_EMAIL:-}" || -z "${BENCH_PASSWORD:-}" ]]; then
@@ -55,11 +70,14 @@ compose_run() {
 }
 
 driver() {
-  compose_run -e BENCH_WORKSPACE="$WORKSPACE" "$@" bench python writebench.py
+  compose_run -e BENCH_WORKSPACE="$WORKSPACE" "$@" bench python "$DRIVER_SCRIPT"
 }
 
 if [[ "$SMOKE" -eq 1 ]]; then
-  echo "sweep: smoke check (1 writer, 2 writes)"
+  echo "sweep: smoke check (writes)"
+  driver -e BENCH_SMOKE=1 >/dev/null
+  echo "sweep: smoke check (fan-out)"
+  DRIVER_SCRIPT="viewbench.py"
   driver -e BENCH_SMOKE=1 >/dev/null
   echo "sweep: smoke passed"
   exit 0
@@ -67,13 +85,19 @@ fi
 
 mkdir -p "$HERE/results"
 STAMP="$(date +%F-%H%M)"
-SCENARIO=$([[ "$FLEET" -eq 1 ]] && echo 4b || echo 4a)
-RESULTS="$HERE/results/${STAMP}-${SCENARIO}-${KIND}.csv"
-RAWDIR="$HERE/results/${STAMP}-${SCENARIO}-${KIND}-raw"
+if [[ "$VIEWERS" -eq 1 ]]; then
+  SCENARIO=5
+  LABEL="${SCENARIO}-fanout"
+else
+  SCENARIO=$([[ "$FLEET" -eq 1 ]] && echo 4b || echo 4a)
+  LABEL="${SCENARIO}-${KIND}"
+fi
+RESULTS="$HERE/results/${STAMP}-${LABEL}.csv"
+RAWDIR="$HERE/results/${STAMP}-${LABEL}-raw"
 MANIFEST="$HERE/results/${STAMP}-${SCENARIO}-fleet.json"
 mkdir -p "$RAWDIR"
 
-echo "ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples" > "$RESULTS"
+echo "$RESULT_HEADER" > "$RESULTS"
 
 SAMPLER=""
 FLEET_UP=0
@@ -112,9 +136,13 @@ fi
 
 for level in $LEVELS; do
   echo
-  echo "sweep: $SCENARIO kind=$KIND conc=$level ops=$OPS"
+  if [[ "$VIEWERS" -eq 1 ]]; then
+    echo "sweep: scenario 5 viewers=$level writes=${BENCH_WRITES:-50} rate=${BENCH_RATE:-10}/s"
+  else
+    echo "sweep: $SCENARIO kind=$KIND conc=$level ops=$OPS"
+  fi
 
-  raw="$RAWDIR/conc-${level}.csv"
+  raw="$RAWDIR/level-${level}.csv"
   summary="$(mktemp)"
   stdout="$(mktemp)"
   row="$(mktemp)"
@@ -124,10 +152,12 @@ for level in $LEVELS; do
   sleep 2
 
   driver "${DRIVER_ARGS[@]}" \
-    -e BENCH_CONC="$level" \
+    -e "$LEVEL_VAR=$level" \
     -e BENCH_OPS="$OPS" \
     -e BENCH_KIND="$KIND" \
     -e BENCH_MODE="$MODE" \
+    -e BENCH_WRITES="${BENCH_WRITES:-50}" \
+    -e BENCH_RATE="${BENCH_RATE:-10}" \
     -e BENCH_TAG="sw${level}_" \
     > "$stdout"
 
@@ -135,9 +165,9 @@ for level in $LEVELS; do
   wait "$SAMPLER" 2>/dev/null || true
   SAMPLER=""
 
-  grep -E "^[0-9]{10},4[ab]," "$stdout" | tail -n 1 > "$row"
+  grep -E "$ROW_RE" "$stdout" | tail -n 1 > "$row"
   if [[ ! -s "$row" ]]; then
-    echo "sweep: no result row from conc=$level; driver output was:" >&2
+    echo "sweep: no result row from level=$level; driver output was:" >&2
     cat "$stdout" >&2
     exit 1
   fi
