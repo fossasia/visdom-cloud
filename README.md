@@ -74,6 +74,10 @@ pytest tests/ -v
 
 The frontend does not yet have an automated test suite; `npm run build` is used as a compile-correctness check.
 
+## Benchmarks
+
+`bench/` measures how much load a single visdom instance can take, against a real deployment rather than a mock — how to run each scenario, the results so far, and what they mean for scaling are all in [bench/README.md](bench/README.md). The headline: one visdom process saturates one core at ~575 line writes/s while three of four cores sit idle, and viewer fan-out is cheap enough that sharding by workspace is the right way past it.
+
 ## Linting
 
 ```bash
