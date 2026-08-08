@@ -79,6 +79,18 @@ if [[ "$SMOKE" -eq 1 ]]; then
   echo "sweep: smoke check (fan-out)"
   DRIVER_SCRIPT="viewbench.py"
   driver -e BENCH_SMOKE=1 >/dev/null
+
+  # Expected instance count comes from the same .env the proxy renders its upstream
+  # from, so the check fails if the pool and the config have drifted apart.
+  SHARD_COUNT=0
+  if [[ -f .env ]]; then
+    SHARD_COUNT="$(set +o pipefail
+      sed -n 's/^VISDOM_SERVERS=//p' .env | grep -o 'server[[:space:]]' | wc -l | tr -d ' ')"
+  fi
+  echo "sweep: smoke check (sharding, expecting $SHARD_COUNT instances)"
+  DRIVER_SCRIPT="shardcheck.py"
+  driver -e BENCH_SHARDS="$SHARD_COUNT"
+
   echo "sweep: smoke passed"
   exit 0
 fi

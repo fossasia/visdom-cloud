@@ -21,6 +21,7 @@ workspace, not a bigger VM and not a faster framework. Numbers in [Results](#res
 | `cpu_sample.py` | VM host | samples visdom / generator / host CPU into CSV |
 | `writebench.py` | `bench` container | scenario 4 — N writers |
 | `viewbench.py` | `bench` container | scenario 5 — N viewers watching one workspace |
+| `shardcheck.py` | `bench` container | asserts nginx routes each workspace to one instance |
 | `fleet.py` | `bench` container | creates and destroys 4b's throwaway workspaces and keys |
 | `Dockerfile`, `requirements.txt` | — | the generator image |
 
@@ -51,9 +52,9 @@ export BENCH_WORKSPACE=loadtest
 ./bench/sweep.sh --smoke                 # 1 writer + 1 viewer, 2 writes: proves the plumbing
 ```
 
-`--smoke` exercises both drivers and takes a few seconds. **Run it first every time** —
-it is what catches an expired key, a stale image or a broken fan-out filter before a
-twenty-minute sweep produces a file full of zeros.
+`--smoke` exercises every driver and takes a few seconds. **Run it first every time** —
+it is what catches an expired key, a stale image, a broken fan-out filter or misrouted
+sharding before a twenty-minute sweep produces a file full of zeros.
 
 | Scenario | Command |
 |---|---|
@@ -218,6 +219,43 @@ delivery latency rather than a comparison across clocks. Writes go to `main` bec
 freshly opened socket defaults to `main`. A plot broadcast arrives as `command: "window"`,
 which is what distinguishes it from the `register`/`layout_update`/`env_update` messages a
 socket gets on connect.
+
+## Checking the sharding routes correctly
+
+`shardcheck.py` runs as part of `--smoke`, or on its own:
+
+```bash
+docker compose --profile bench run --rm --no-deps -T \
+  -e BENCH_SHARDS=3 bench python shardcheck.py
+```
+
+visdom keeps a workspace's envs and socket subscribers in one process's memory, so every
+request touching a workspace has to reach the same instance. Two things can break that,
+and **neither raises an error** — both present as a dashboard that silently never
+updates, which is why this is a test rather than something you eyeball:
+
+- **Affinity.** Browser sockets carry the slug in the path (`/vis/w/<slug>/socket`); the
+  python client sends it as `X-Visdom-Workspace`. If those hash differently, a viewer
+  subscribes on one instance while writes land on another. The check subscribes over the
+  browser path, writes over the header path, and asserts the broadcast arrives.
+- **Distribution.** If the key resolves empty for everything, every workspace lands on one
+  instance — sharding "works" while buying nothing, and the affinity check alone still
+  passes. The check probes many slugs and asserts each pins to one instance and that the
+  pool is actually spread across.
+
+Distribution reads nginx's `X-Visdom-Upstream` header, so it measures *routing* rather
+than access and its slugs don't need to be workspaces that exist — a denied request is
+still a routed request. Affinity does need a real workspace, since it has to observe a
+broadcast.
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `BENCH_PROBES` | `24` | synthetic slugs for the distribution check |
+| `BENCH_SHARDS` | `0` | instances expected in use; `0` reports without asserting |
+
+`sweep.sh --smoke` derives `BENCH_SHARDS` by counting `server` entries in `.env`'s
+`VISDOM_SERVERS`, so the check fails if the running pool and the proxy config have
+drifted apart.
 
 ## Who creates the workspaces, and who removes them
 
