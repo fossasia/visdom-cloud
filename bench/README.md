@@ -78,7 +78,9 @@ each subscriber timestamps arrival. Writer and subscribers share a process, so t
 difference is real delivery latency rather than a comparison across clocks.
 
 Writes go to `main` because `broadcast()` only reaches subscribers whose `eid` matches
-the env being written, and a freshly opened socket defaults to `main`.
+the env being written, and a freshly opened socket defaults to `main`. A plot broadcast
+arrives as `command: "window"`, which is what distinguishes it from the
+`register`/`layout_update`/`env_update` messages a socket gets on connect.
 
 **The number to hunt: at what viewer count does visdom pin a core at a modest write
 rate?** If CPU scales linearly with viewers, serialize-per-subscriber is confirmed and

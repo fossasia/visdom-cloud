@@ -14,8 +14,8 @@ comparison across hosts.
 
 Writes go to `main` because `broadcast()` only reaches subscribers whose `eid`
 matches the env being written, and a freshly opened socket defaults to `main`.
-Plot broadcasts are told apart from the register/layout/env messages a socket
-receives on connect by the absence of a `command` field.
+A plot broadcast arrives as `command: "window"`, which distinguishes it from the
+register/layout_update/env_update messages a socket receives on connect.
 
   VISDOM_API_KEY    required
   BENCH_WORKSPACE   workspace slug (default: loadtest)
@@ -125,7 +125,7 @@ class Viewer(threading.Thread):
                 msg = json.loads(raw)
             except ValueError:
                 continue
-            if "command" not in msg and msg.get("eid") == ENV:
+            if msg.get("command") == "window" and msg.get("eid") == ENV:
                 self.arrivals.append(time.perf_counter())
 
 
