@@ -62,6 +62,22 @@ services:
       - gateway
       - visdom
 
+  # Load generator for bench/. Profile-gated, so a plain `docker compose up` never
+  # starts it; see bench/README.md.
+  bench:
+    profiles: ["bench"]
+    build:
+      context: ./bench
+    environment:
+      BENCH_SERVER: http://proxy
+      BENCH_PORT: ${NGINX_PORT}
+      BENCH_BASE_URL: ${VISDOM_BASE_URL}
+      VISDOM_API_KEY: ${VISDOM_API_KEY:-}
+      BENCH_EMAIL: ${BENCH_EMAIL:-}
+      BENCH_PASSWORD: ${BENCH_PASSWORD:-}
+    depends_on:
+      - proxy
+
 volumes:
   db_data:
   visdom_data:
