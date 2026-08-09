@@ -209,6 +209,33 @@ threads contending on the GIL to timestamp arrivals. **Do not quote the 185 ms p
 server figure** — confirming real fan-out latency needs viewers spread across processes
 or machines.
 
+### What this means in users
+
+Concurrency in the tables above is *simultaneous in-flight writes*, which is not a user
+count. A training script writes a plot every T seconds, so supportable runs ≈
+throughput × T.
+
+| Write cadence | 1 shard (522/s) | 3 shards (743/s) |
+|---|---|---|
+| Every 1s — very heavy | ~520 runs | ~740 runs |
+| Every 5s — heavy | ~2,600 runs | ~3,700 runs |
+| Every 10s — typical | ~5,200 runs | ~7,400 runs |
+| Every 60s — per-epoch | ~31,000 runs | ~44,000 runs |
+
+At 7,400 runs writing every 10s the average in-flight concurrency is ~72, which puts p95
+around 100 ms — comfortably interactive.
+
+**Viewers barely enter the budget.** 2,000 broadcasts/s costs 0.24 cores, so a few hundred
+people watching plots live is noise next to the writes.
+
+Three things this is not:
+
+- **One training run per user.** Someone running ten jobs counts as ten.
+- **Valid with the generator on the same box.** These figures assume load comes from
+  elsewhere; here it was competing for the same four cores.
+- **Platform capacity.** Scenarios 1–3 — login storms, dashboard browsing, cold page
+  loads — are unmeasured, so this is write-path capacity only.
+
 ### What this means for scaling
 
 Sticky routing puts every viewer of a workspace on one instance by design, so fan-out
