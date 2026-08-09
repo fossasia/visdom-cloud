@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import APIKey, Membership, User, utcnow
-from app.schemas import TokenPayload
 from app.security import claims_match_user, decode_token
 
 # OAuth2 scheme looking for JWT tokens in the Authorization header
@@ -36,6 +35,40 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def user_for_access_token(db: Session, token: str | None) -> User | None:
+    """
+    Resolves the user an access token identifies, or None if it does not
+    identify one. Rejects a missing, malformed, expired or wrong-type token, an
+    unknown user, and a token from a superseded session generation — logging out
+    bumps `token_version`, so tokens issued before it stop resolving.
+
+    Shared by the header-bearer path (`get_current_user`) and the cookie path
+    the nginx auth gate calls, so both honour revocation identically.
+    """
+    if not token:
+        return None
+
+    try:
+        payload = decode_token(token)
+    except jwt.PyJWTError:
+        return None
+
+    if payload.get("sub") is None or payload.get("type") != "access":
+        return None
+
+    # Explicit conversion for SQLite/compatibility.
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (TypeError, ValueError):
+        return None
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not claims_match_user(payload, user):
+        return None
+
+    return user
 
 
 def get_current_user(
@@ -53,33 +86,8 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if not token:
-        raise credentials_exception
-
-    try:
-        payload = decode_token(token)
-        user_id_str: str = payload.get("sub")
-        token_type: str = payload.get("type")
-
-        # Verify it's an access token (not a refresh token)
-        if user_id_str is None or token_type != "access":
-            raise credentials_exception
-
-        token_data = TokenPayload(sub=user_id_str, type=token_type)
-    except jwt.PyJWTError:
-        raise credentials_exception from None
-
-    # Query database using UUID (explicitly converted for SQLite/compatibility)
-    try:
-        user_id = uuid.UUID(token_data.sub)
-    except (TypeError, ValueError):
-        raise credentials_exception from None
-
-    user = db.query(User).filter(User.id == user_id).first()
+    user = user_for_access_token(db, token)
     if user is None:
-        raise credentials_exception
-
-    if not claims_match_user(payload, user):
         raise credentials_exception
 
     if not user.is_active:
