@@ -11,7 +11,11 @@ Postgres — using the visdom python client, which is what a user's training scr
 conc≈25 and throughput plateaus at **~575 line writes/s**, while the host still has
 2.9 of 4 cores idle. Viewer fan-out is *not* the second ceiling — 2,000 broadcasts/s
 costs 0.24 cores. The scaling axis is therefore more visdom processes sharded by
-workspace, not a bigger VM and not a faster framework. Numbers in [Results](#results).
+workspace, not a bigger VM and not a faster framework.
+
+**Sharding by workspace then lifts that ceiling**: three instances behind nginx
+consistent hashing reach 1.51 cores as a pool and 743 writes/s, and throughput no longer
+plateaus. Numbers in [Results](#results).
 
 ## Layout
 
@@ -149,6 +153,37 @@ first-touch disk I/O. Space creation is permanent, so only the resolve recurs af
 45 s cache expires. **The impact of `CONCERNS.md` §1c is set by how many writes follow
 each resolve**, and a real workload that opens a client and trains for an hour looks like
 4a, not like the cold case.
+
+### Sharding — 4b across three instances (2026-08-09)
+
+Same 4b load, but nginx consistent-hashes each workspace to one of three visdom
+instances. `visdom_cores` is now the **sum across all three** processes.
+
+| conc | 1 shard thr/s | 3 shard thr/s | Δ | 1 shard cores | 3 shard cores | host_cores |
+|---|---|---|---|---|---|---|
+| 1 | 227.2 | 229.5 | +1% | 0.12 | 0.17 | 1.55 |
+| 5 | 483.9 | 560.7 | +16% | 0.34 | 0.50 | 2.35 |
+| 10 | 550.2 | 715.5 | +30% | 0.47 | 0.54 | 2.49 |
+| 25 | 548.0 | 720.4 | +31% | 0.96 | **1.52** | **4.00** |
+| 50 | 521.8 | 743.4 | **+42%** | 0.96 | **1.51** | 3.99 |
+
+**The shards do work in parallel, and that is the result.** A single Python process
+cannot exceed 1.0 cores, so 1.51 is only reachable by more than one of them serving
+simultaneously. Combined with `shardcheck.py` proving each workspace pins to one
+instance, the design is confirmed: state stays partitioned *and* the work spreads.
+
+**The shape changed too.** One shard peaked at conc=10 and then declined
+(550 → 548 → 522) — queueing behind a serialized resource. Three shards rise all the way
+to conc=50 (715 → 720 → 743) and are still climbing. The single-core ceiling is gone.
+
+**+42% and not +200%, because the box is full, not because sharding underdelivers.**
+`host_cores` hits 4.00 of 4 at conc=25 while the pool sits at 1.51 of a possible 3.0 —
+visdom has headroom and no cores to spend it on. The load generator alone takes 1.76,
+and gateway, Postgres and nginx want the rest. **Measuring the real ceiling of three
+shards needs load generated from a second machine**; on this VM the generator and the
+server are competing for the same four cores (trap 2).
+
+Memory scales as expected: 418 MB resident across three instances against 139 MB for one.
 
 ### 5 — viewer fan-out
 
