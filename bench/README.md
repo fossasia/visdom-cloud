@@ -11,7 +11,11 @@ Postgres — using the visdom python client, which is what a user's training scr
 conc≈25 and throughput plateaus at **~575 line writes/s**, while the host still has
 2.9 of 4 cores idle. Viewer fan-out is *not* the second ceiling — 2,000 broadcasts/s
 costs 0.24 cores. The scaling axis is therefore more visdom processes sharded by
-workspace, not a bigger VM and not a faster framework. Numbers in [Results](#results).
+workspace, not a bigger VM and not a faster framework.
+
+**Sharding by workspace then lifts that ceiling**: three instances behind nginx
+consistent hashing reach 1.51 cores as a pool and 743 writes/s, and throughput no longer
+plateaus. Numbers in [Results](#results).
 
 ## Layout
 
@@ -21,6 +25,7 @@ workspace, not a bigger VM and not a faster framework. Numbers in [Results](#res
 | `cpu_sample.py` | VM host | samples visdom / generator / host CPU into CSV |
 | `writebench.py` | `bench` container | scenario 4 — N writers |
 | `viewbench.py` | `bench` container | scenario 5 — N viewers watching one workspace |
+| `shardcheck.py` | `bench` container | asserts nginx routes each workspace to one instance |
 | `fleet.py` | `bench` container | creates and destroys 4b's throwaway workspaces and keys |
 | `Dockerfile`, `requirements.txt` | — | the generator image |
 
@@ -51,9 +56,9 @@ export BENCH_WORKSPACE=loadtest
 ./bench/sweep.sh --smoke                 # 1 writer + 1 viewer, 2 writes: proves the plumbing
 ```
 
-`--smoke` exercises both drivers and takes a few seconds. **Run it first every time** —
-it is what catches an expired key, a stale image or a broken fan-out filter before a
-twenty-minute sweep produces a file full of zeros.
+`--smoke` exercises every driver and takes a few seconds. **Run it first every time** —
+it is what catches an expired key, a stale image, a broken fan-out filter or misrouted
+sharding before a twenty-minute sweep produces a file full of zeros.
 
 | Scenario | Command |
 |---|---|
@@ -149,6 +154,37 @@ first-touch disk I/O. Space creation is permanent, so only the resolve recurs af
 each resolve**, and a real workload that opens a client and trains for an hour looks like
 4a, not like the cold case.
 
+### Sharding — 4b across three instances (2026-08-09)
+
+Same 4b load, but nginx consistent-hashes each workspace to one of three visdom
+instances. `visdom_cores` is now the **sum across all three** processes.
+
+| conc | 1 shard thr/s | 3 shard thr/s | Δ | 1 shard cores | 3 shard cores | host_cores |
+|---|---|---|---|---|---|---|
+| 1 | 227.2 | 229.5 | +1% | 0.12 | 0.17 | 1.55 |
+| 5 | 483.9 | 560.7 | +16% | 0.34 | 0.50 | 2.35 |
+| 10 | 550.2 | 715.5 | +30% | 0.47 | 0.54 | 2.49 |
+| 25 | 548.0 | 720.4 | +31% | 0.96 | **1.52** | **4.00** |
+| 50 | 521.8 | 743.4 | **+42%** | 0.96 | **1.51** | 3.99 |
+
+**The shards do work in parallel, and that is the result.** A single Python process
+cannot exceed 1.0 cores, so 1.51 is only reachable by more than one of them serving
+simultaneously. Combined with `shardcheck.py` proving each workspace pins to one
+instance, the design is confirmed: state stays partitioned *and* the work spreads.
+
+**The shape changed too.** One shard peaked at conc=10 and then declined
+(550 → 548 → 522) — queueing behind a serialized resource. Three shards rise all the way
+to conc=50 (715 → 720 → 743) and are still climbing. The single-core ceiling is gone.
+
+**+42% and not +200%, because the box is full, not because sharding underdelivers.**
+`host_cores` hits 4.00 of 4 at conc=25 while the pool sits at 1.51 of a possible 3.0 —
+visdom has headroom and no cores to spend it on. The load generator alone takes 1.76,
+and gateway, Postgres and nginx want the rest. **Measuring the real ceiling of three
+shards needs load generated from a second machine**; on this VM the generator and the
+server are competing for the same four cores (trap 2).
+
+Memory scales as expected: 418 MB resident across three instances against 139 MB for one.
+
 ### 5 — viewer fan-out
 
 N subscribers on `main` in one workspace, one writer at 10 writes/s, 50 writes:
@@ -172,6 +208,33 @@ viewers the bench container used 1.19 cores against visdom's 0.24: 200 Python re
 threads contending on the GIL to timestamp arrivals. **Do not quote the 185 ms p50 as a
 server figure** — confirming real fan-out latency needs viewers spread across processes
 or machines.
+
+### What this means in users
+
+Concurrency in the tables above is *simultaneous in-flight writes*, which is not a user
+count. A training script writes a plot every T seconds, so supportable runs ≈
+throughput × T.
+
+| Write cadence | 1 shard (522/s) | 3 shards (743/s) |
+|---|---|---|
+| Every 1s — very heavy | ~520 runs | ~740 runs |
+| Every 5s — heavy | ~2,600 runs | ~3,700 runs |
+| Every 10s — typical | ~5,200 runs | ~7,400 runs |
+| Every 60s — per-epoch | ~31,000 runs | ~44,000 runs |
+
+At 7,400 runs writing every 10s the average in-flight concurrency is ~72, which puts p95
+around 100 ms — comfortably interactive.
+
+**Viewers barely enter the budget.** 2,000 broadcasts/s costs 0.24 cores, so a few hundred
+people watching plots live is noise next to the writes.
+
+Three things this is not:
+
+- **One training run per user.** Someone running ten jobs counts as ten.
+- **Valid with the generator on the same box.** These figures assume load comes from
+  elsewhere; here it was competing for the same four cores.
+- **Platform capacity.** Scenarios 1–3 — login storms, dashboard browsing, cold page
+  loads — are unmeasured, so this is write-path capacity only.
 
 ### What this means for scaling
 
@@ -218,6 +281,43 @@ delivery latency rather than a comparison across clocks. Writes go to `main` bec
 freshly opened socket defaults to `main`. A plot broadcast arrives as `command: "window"`,
 which is what distinguishes it from the `register`/`layout_update`/`env_update` messages a
 socket gets on connect.
+
+## Checking the sharding routes correctly
+
+`shardcheck.py` runs as part of `--smoke`, or on its own:
+
+```bash
+docker compose --profile bench run --rm --no-deps -T \
+  -e BENCH_SHARDS=3 bench python shardcheck.py
+```
+
+visdom keeps a workspace's envs and socket subscribers in one process's memory, so every
+request touching a workspace has to reach the same instance. Two things can break that,
+and **neither raises an error** — both present as a dashboard that silently never
+updates, which is why this is a test rather than something you eyeball:
+
+- **Affinity.** Browser sockets carry the slug in the path (`/vis/w/<slug>/socket`); the
+  python client sends it as `X-Visdom-Workspace`. If those hash differently, a viewer
+  subscribes on one instance while writes land on another. The check subscribes over the
+  browser path, writes over the header path, and asserts the broadcast arrives.
+- **Distribution.** If the key resolves empty for everything, every workspace lands on one
+  instance — sharding "works" while buying nothing, and the affinity check alone still
+  passes. The check probes many slugs and asserts each pins to one instance and that the
+  pool is actually spread across.
+
+Distribution reads nginx's `X-Visdom-Upstream` header, so it measures *routing* rather
+than access and its slugs don't need to be workspaces that exist — a denied request is
+still a routed request. Affinity does need a real workspace, since it has to observe a
+broadcast.
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `BENCH_PROBES` | `24` | synthetic slugs for the distribution check |
+| `BENCH_SHARDS` | `0` | instances expected in use; `0` reports without asserting |
+
+`sweep.sh --smoke` derives `BENCH_SHARDS` by counting `server` entries in `.env`'s
+`VISDOM_SERVERS`, so the check fails if the running pool and the proxy config have
+drifted apart.
 
 ## Who creates the workspaces, and who removes them
 

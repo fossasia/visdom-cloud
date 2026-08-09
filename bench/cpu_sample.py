@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Samples CPU on the VM host at three levels while a benchmark runs: the visdom server
-process, the load generator processes, and the host as a whole.
+processes summed across every shard, the load generator processes, and the host as a
+whole.
 
 Runs on the host rather than in a container. A container has its own PID namespace and
 cannot see the visdom server process; the host's namespace is the parent of every
@@ -48,12 +49,17 @@ def read_cmdline(pid):
         return []
 
 
-def find_server_pid():
+def find_server_pids():
+    """Every visdom process, not the first one.
+
+    Sharding runs several instances, and sampling only the one that happened to be
+    found first understates the pool by however many shards exist."""
+    pids = []
     for path in glob.glob("/proc/[0-9]*/cmdline"):
         pid = int(path.split("/")[2])
         if SERVER_MARKER in read_cmdline(pid):
-            return pid
-    return None
+            pids.append(pid)
+    return pids
 
 
 def find_generator_pids():
@@ -103,14 +109,15 @@ def main():
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
 
-    server_pid = find_server_pid()
-    if server_pid is None:
+    server_pids = find_server_pids()
+    if not server_pids:
         sys.stderr.write(
             "cpu_sample: no process matching %r found. Is the visdom container up, and "
             "is this running on the VM host rather than inside a container?\n"
             % SERVER_MARKER
         )
         return 2
+    sys.stderr.write("cpu_sample: sampling %d visdom instance(s)\n" % len(server_pids))
 
     raw = open(args.raw, "w") if args.raw else None
     if raw:
@@ -118,7 +125,7 @@ def main():
 
     started = time.time()
     prev_wall = started
-    prev_server = proc_ticks(server_pid)
+    prev_server = {pid: proc_ticks(pid) for pid in server_pids}
     prev_gen = {pid: proc_ticks(pid) for pid in find_generator_pids()}
     prev_host_total, prev_host_busy = host_ticks()
 
@@ -135,12 +142,20 @@ def main():
         if wall <= 0:
             continue
 
-        cur_server = proc_ticks(server_pid)
-        if cur_server is None:
-            sys.stderr.write("cpu_sample: visdom server process %d vanished\n" % server_pid)
+        cur_server = {}
+        server_delta = 0
+        for pid in server_pids:
+            ticks = proc_ticks(pid)
+            if ticks is None:
+                sys.stderr.write("cpu_sample: visdom server process %d vanished\n" % pid)
+                continue
+            cur_server[pid] = ticks
+            if pid in prev_server:
+                server_delta += ticks - prev_server[pid]
+        if not cur_server:
             break
-        server_cores = (cur_server - prev_server) / CLK_TCK / wall
         prev_server = cur_server
+        server_cores = server_delta / CLK_TCK / wall
 
         cur_gen = {}
         gen_delta = 0
@@ -159,7 +174,7 @@ def main():
         host_cores = (host_busy - prev_host_busy) / total_delta * NCPU if total_delta else 0.0
         prev_host_total, prev_host_busy = host_total, host_busy
 
-        rss = proc_rss_mb(server_pid)
+        rss = sum(proc_rss_mb(pid) for pid in cur_server)
         prev_wall = now
         elapsed = now - started
 
