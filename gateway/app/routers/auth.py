@@ -18,6 +18,7 @@ from app.dependencies import (
     get_current_user,
     get_db,
     resolve_active_api_key,
+    user_for_access_token,
 )
 from app.models import APIKey, Membership, User, WorkspaceInvite
 from app.schemas import (
@@ -302,16 +303,14 @@ def verify_session(request: Request, db: Session = Depends(get_db)):
     caller presents either a valid `session_token` cookie (browser read path) or
     a valid `X-API-KEY` (programmatic write path), and 401 otherwise. This is a
     coarse "is this a legitimate caller?" gate; the precise workspace + role check
-    is done separately by the visdom resolve endpoints. The cookie path is
-    stateless; only the API-key path touches the DB."""
-    token = request.cookies.get("session_token")
-    if token:
-        try:
-            payload = decode_token(token)
-            if payload.get("sub") is not None and payload.get("type") == "access":
-                return {"status": "ok", "auth": "session"}
-        except jwt.PyJWTError:
-            pass
+    is done separately by the visdom resolve endpoints.
+
+    Both paths resolve against the database so that logging out, or revoking a
+    key, actually closes the gate. Note that nginx caches this response per
+    credential, so a revoked session keeps passing until that entry expires."""
+    user = user_for_access_token(db, request.cookies.get("session_token"))
+    if user is not None and user.is_active:
+        return {"status": "ok", "auth": "session"}
 
     if resolve_active_api_key(db, request.headers.get("X-API-KEY")) is not None:
         return {"status": "ok", "auth": "api_key"}
