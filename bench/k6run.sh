@@ -36,7 +36,7 @@ if [[ "$SMOKE" -eq 1 ]]; then
   echo "k6run: smoke check ($SCENARIO)"
   BENCH_RATES=1 BENCH_STAGE=5 BENCH_USERS=2 \
     docker compose --profile bench run --rm --no-deps -T k6 \
-      run --quiet --no-summary "/scripts/${SCENARIO}.js" >/dev/null
+      run --quiet "/scripts/${SCENARIO}.js" >/dev/null
   echo "k6run: smoke passed"
   exit 0
 fi
@@ -76,7 +76,7 @@ SAMPLER=$!
 sleep 2
 
 docker compose --profile bench run --rm --no-deps -T k6 \
-  run --quiet --summary-export=/dev/null "/scripts/${SCENARIO}.js" > "$STDOUT" || {
+  run --quiet "/scripts/${SCENARIO}.js" > "$STDOUT" || {
     echo "k6run: k6 exited non-zero; its thresholds failed or the run errored." >&2
     echo "k6run: output was:" >&2
     cat "$STDOUT" >&2
