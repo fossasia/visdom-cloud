@@ -40,8 +40,10 @@ export const options = {
   },
 };
 
+// Not a .local address: the gateway validates with email_validator, which rejects
+// special-use and reserved names.
 function email(i) {
-  return `k6-login-${i}@bench.local`;
+  return `k6-login-${i}@example.com`;
 }
 
 export function setup() {
@@ -71,6 +73,12 @@ export default function (data) {
 }
 
 export function handleSummary(data) {
+  // Without this, a run that failed in setup dies here on a missing metric and the
+  // TypeError buries the error that actually mattered.
+  if (!data.metrics.http_reqs || !data.metrics.http_reqs.values.count) {
+    return { stdout: 'k6: no requests completed, see the errors above\n' };
+  }
+
   const d = data.metrics.http_req_duration.values;
   const reqs = data.metrics.http_reqs.values;
   const failed = data.metrics.http_req_failed.values.passes || 0;
