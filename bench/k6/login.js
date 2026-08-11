@@ -19,7 +19,9 @@ import { check } from 'k6';
 
 const BASE = __ENV.BENCH_BASE || 'http://proxy';
 const USERS = parseInt(__ENV.BENCH_USERS || '20', 10);
-const RATES = (__ENV.BENCH_RATES || '2,5,10,20,40').split(',').map(Number);
+// Measured ceiling is around 5-6/s, so the useful range sits either side of that.
+// Asking for 40/s only produced a 30s queue and told us nothing extra.
+const RATES = (__ENV.BENCH_RATES || '1,2,4,6,8,12').split(',').map(Number);
 const STAGE = parseInt(__ENV.BENCH_STAGE || '30', 10);
 const PASSWORD = 'benchmark-password';
 
@@ -34,7 +36,9 @@ export const options = {
       stages: RATES.map((rate) => ({ target: rate, duration: `${STAGE}s` })),
     },
   },
-  // A run of denials would report a throughput that measures nothing, so fail loudly.
+  // The threshold guards credentials, not speed. A run of 401s would report a
+  // throughput that measures nothing and must fail; requests timing out because the
+  // gateway is saturated are the result we came for and must not.
   thresholds: {
     checks: ['rate>0.99'],
   },
@@ -72,7 +76,7 @@ export default function (data) {
     { username: user, password: PASSWORD },
     { tags: { name: 'login' } }
   );
-  check(res, { 'login 200': (r) => r.status === 200 });
+  check(res, { 'credentials accepted': (r) => r.status !== 401 && r.status !== 403 });
 }
 
 export function handleSummary(data) {
@@ -104,10 +108,9 @@ export function handleSummary(data) {
     dropped,
   ].join(',');
 
-  return {
-    stdout: `${row}\n`,
-    'summary.json': JSON.stringify(data),
-  };
+  // stdout only: /scripts is mounted read-only, and writing a file there fails the
+  // run at the very end, after all the work is done.
+  return { stdout: `${row}\n` };
 }
 
 export const CSV_HEADER =
