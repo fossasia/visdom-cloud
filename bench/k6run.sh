@@ -34,9 +34,19 @@ WATCH=(--watch "gateway=uvicorn" --watch "db=postgres:")
 
 if [[ "$SMOKE" -eq 1 ]]; then
   echo "k6run: smoke check ($SCENARIO)"
+  probe="$(mktemp)"
+  # k6 exits 0 even when handleSummary throws, so checking the exit code alone would
+  # call a run that produced nothing a pass. Insist on the CSV row.
   BENCH_RATES=1 BENCH_STAGE=5 BENCH_USERS=2 \
     docker compose --profile bench run --rm --no-deps -T k6 \
-      run --quiet "/scripts/${SCENARIO}.js" >/dev/null
+      run --quiet "/scripts/${SCENARIO}.js" > "$probe" 2>&1 || true
+  if ! grep -qE '^[0-9]{10},' "$probe"; then
+    echo "k6run: smoke produced no result row; output was:" >&2
+    cat "$probe" >&2
+    rm -f "$probe"
+    exit 1
+  fi
+  rm -f "$probe"
   echo "k6run: smoke passed"
   exit 0
 fi

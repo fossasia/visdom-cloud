@@ -38,6 +38,9 @@ export const options = {
   thresholds: {
     checks: ['rate>0.99'],
   },
+  // p(99) is not in k6's default set, and asking for it after the fact yields
+  // undefined rather than an error.
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
 };
 
 // Not a .local address: the gateway validates with email_validator, which rejects
