@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """
-Samples CPU on the VM host at three levels while a benchmark runs: the visdom server
-processes summed across every shard, the load generator processes, and the host as a
-whole.
+Samples CPU on the VM host while a benchmark runs: one column group per watched set
+of processes, plus the host as a whole.
 
 Runs on the host rather than in a container. A container has its own PID namespace and
-cannot see the visdom server process; the host's namespace is the parent of every
-container's, so all three levels are reachable from here. Standard library only.
+cannot see the processes under test; the host's namespace is the parent of every
+container's, so everything is reachable from here. Standard library only.
 
   python3 cpu_sample.py --raw raw.csv --summary summary.csv --duration 60
+  python3 cpu_sample.py --watch gateway=uvicorn --watch db=postgres:
+  python3 cpu_sample.py --print-header
+
+A watch is NAME=MARKER[,MARKER...]; a process matches when any marker appears in any
+of its argv entries, and every match is summed. That is what makes a sharded service
+add up correctly rather than reporting whichever instance was found first.
+
+Which processes matter depends on the scenario: the visdom write and fan-out benchmarks
+watch visdom, while the k6 gateway scenarios watch the gateway and Postgres instead.
+Column names follow the watch names, so --print-header is the one source of truth for
+the CSV shape and callers do not repeat it.
 
 With --duration 0 it samples until SIGTERM, which is how sweep.sh drives it.
 """
@@ -24,14 +34,7 @@ CLK_TCK = os.sysconf("SC_CLK_TCK")
 PAGE_SIZE = os.sysconf("SC_PAGE_SIZE")
 NCPU = os.cpu_count() or 1
 
-SERVER_MARKER = "visdom.server"
-GENERATOR_MARKERS = ("writebench.py", "viewbench.py")
-
-RAW_HEADER = "ts,elapsed_s,visdom_cores,bench_cores,host_cores,visdom_rss_mb"
-SUMMARY_HEADER = (
-    "visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,"
-    "visdom_rss_mb_max,samples"
-)
+DEFAULT_WATCHES = ("visdom=visdom.server", "bench=writebench.py,viewbench.py")
 
 _stop = False
 
@@ -39,6 +42,34 @@ _stop = False
 def _handle_stop(signum, frame):
     global _stop
     _stop = True
+
+
+def parse_watch(spec):
+    """Turn NAME=MARKER[,MARKER...] into (name, markers)."""
+    name, _, markers = spec.partition("=")
+    if not name or not markers:
+        raise argparse.ArgumentTypeError(
+            "watch %r must look like NAME=MARKER[,MARKER...]" % spec
+        )
+    return name, tuple(m for m in markers.split(",") if m)
+
+
+def raw_header(watches):
+    columns = ["ts", "elapsed_s"]
+    for name, _ in watches:
+        columns += ["%s_cores" % name, "%s_rss_mb" % name]
+    return ",".join(columns + ["host_cores"])
+
+
+def summary_header(watches):
+    columns = []
+    for name, _ in watches:
+        columns += [
+            "%s_cores_mean" % name,
+            "%s_cores_max" % name,
+            "%s_rss_mb_max" % name,
+        ]
+    return ",".join(columns + ["host_cores_max", "samples"])
 
 
 def read_cmdline(pid):
@@ -49,25 +80,13 @@ def read_cmdline(pid):
         return []
 
 
-def find_server_pids():
-    """Every visdom process, not the first one.
-
-    Sharding runs several instances, and sampling only the one that happened to be
-    found first understates the pool by however many shards exist."""
-    pids = []
-    for path in glob.glob("/proc/[0-9]*/cmdline"):
-        pid = int(path.split("/")[2])
-        if SERVER_MARKER in read_cmdline(pid):
-            pids.append(pid)
-    return pids
-
-
-def find_generator_pids():
+def find_pids(markers):
+    """Every process whose argv contains any of ``markers``."""
     pids = []
     for path in glob.glob("/proc/[0-9]*/cmdline"):
         pid = int(path.split("/")[2])
         argv = read_cmdline(pid)
-        if any(marker in arg for arg in argv for marker in GENERATOR_MARKERS):
+        if any(marker in arg for arg in argv for marker in markers):
             pids.append(pid)
     return pids
 
@@ -98,41 +117,86 @@ def host_ticks():
     return total, total - idle
 
 
+class Watch:
+    """One named group of processes, tracked across samples.
+
+    Membership is re-resolved every tick so processes that start or stop mid-run are
+    picked up, which matters for the per-request workers Postgres forks.
+    """
+
+    def __init__(self, name, markers):
+        self.name = name
+        self.markers = markers
+        self.previous = {pid: proc_ticks(pid) for pid in find_pids(markers)}
+        self.cores = []
+        self.rss_max = 0.0
+
+    def sample(self, wall):
+        current = {}
+        delta = 0
+        rss = 0.0
+        for pid in find_pids(self.markers):
+            ticks = proc_ticks(pid)
+            if ticks is None:
+                continue
+            current[pid] = ticks
+            rss += proc_rss_mb(pid)
+            if pid in self.previous:
+                delta += ticks - self.previous[pid]
+        self.previous = current
+        cores = delta / CLK_TCK / wall
+        self.cores.append(cores)
+        self.rss_max = max(self.rss_max, rss)
+        return cores, rss
+
+    def summary(self):
+        mean = sum(self.cores) / len(self.cores) if self.cores else 0.0
+        peak = max(self.cores) if self.cores else 0.0
+        return [mean, peak, self.rss_max]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw", default="")
     parser.add_argument("--summary", default="")
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument("--duration", type=float, default=0.0)
+    parser.add_argument("--watch", type=parse_watch, action="append")
+    parser.add_argument("--print-header", action="store_true")
     args = parser.parse_args()
+
+    watches = args.watch or [parse_watch(spec) for spec in DEFAULT_WATCHES]
+
+    if args.print_header:
+        sys.stdout.write(summary_header(watches) + "\n")
+        return 0
 
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
 
-    server_pids = find_server_pids()
-    if not server_pids:
+    tracked = [Watch(name, markers) for name, markers in watches]
+    for watch in tracked:
+        if not watch.previous:
+            sys.stderr.write(
+                "cpu_sample: no process matching %s found for watch %r. Is the "
+                "container up, and is this running on the VM host rather than inside "
+                "a container?\n" % (list(watch.markers), watch.name)
+            )
+            return 2
         sys.stderr.write(
-            "cpu_sample: no process matching %r found. Is the visdom container up, and "
-            "is this running on the VM host rather than inside a container?\n"
-            % SERVER_MARKER
+            "cpu_sample: watching %d process(es) as %r\n"
+            % (len(watch.previous), watch.name)
         )
-        return 2
-    sys.stderr.write("cpu_sample: sampling %d visdom instance(s)\n" % len(server_pids))
 
     raw = open(args.raw, "w") if args.raw else None
     if raw:
-        raw.write(RAW_HEADER + "\n")
+        raw.write(raw_header(watches) + "\n")
 
     started = time.time()
     prev_wall = started
-    prev_server = {pid: proc_ticks(pid) for pid in server_pids}
-    prev_gen = {pid: proc_ticks(pid) for pid in find_generator_pids()}
     prev_host_total, prev_host_busy = host_ticks()
-
-    server_samples = []
-    gen_max = 0.0
     host_max = 0.0
-    rss_max = 0.0
+    samples = 0
 
     while not _stop:
         time.sleep(args.interval)
@@ -141,53 +205,23 @@ def main():
         wall = now - prev_wall
         if wall <= 0:
             continue
+        prev_wall = now
 
-        cur_server = {}
-        server_delta = 0
-        for pid in server_pids:
-            ticks = proc_ticks(pid)
-            if ticks is None:
-                sys.stderr.write("cpu_sample: visdom server process %d vanished\n" % pid)
-                continue
-            cur_server[pid] = ticks
-            if pid in prev_server:
-                server_delta += ticks - prev_server[pid]
-        if not cur_server:
-            break
-        prev_server = cur_server
-        server_cores = server_delta / CLK_TCK / wall
-
-        cur_gen = {}
-        gen_delta = 0
-        for pid in find_generator_pids():
-            ticks = proc_ticks(pid)
-            if ticks is None:
-                continue
-            cur_gen[pid] = ticks
-            if pid in prev_gen:
-                gen_delta += ticks - prev_gen[pid]
-        prev_gen = cur_gen
-        gen_cores = gen_delta / CLK_TCK / wall
+        readings = [watch.sample(wall) for watch in tracked]
 
         host_total, host_busy = host_ticks()
         total_delta = host_total - prev_host_total
         host_cores = (host_busy - prev_host_busy) / total_delta * NCPU if total_delta else 0.0
         prev_host_total, prev_host_busy = host_total, host_busy
-
-        rss = sum(proc_rss_mb(pid) for pid in cur_server)
-        prev_wall = now
-        elapsed = now - started
-
-        server_samples.append(server_cores)
-        gen_max = max(gen_max, gen_cores)
         host_max = max(host_max, host_cores)
-        rss_max = max(rss_max, rss)
+        samples += 1
 
+        elapsed = now - started
         if raw:
-            raw.write(
-                "%.0f,%.1f,%.3f,%.3f,%.3f,%.1f\n"
-                % (now, elapsed, server_cores, gen_cores, host_cores, rss)
-            )
+            values = ["%.0f" % now, "%.1f" % elapsed]
+            for cores, rss in readings:
+                values += ["%.3f" % cores, "%.1f" % rss]
+            raw.write(",".join(values + ["%.3f" % host_cores]) + "\n")
             raw.flush()
 
         if args.duration and elapsed >= args.duration:
@@ -196,21 +230,16 @@ def main():
     if raw:
         raw.close()
 
-    mean = sum(server_samples) / len(server_samples) if server_samples else 0.0
-    line = "%.3f,%.3f,%.3f,%.3f,%.1f,%d" % (
-        mean,
-        max(server_samples) if server_samples else 0.0,
-        gen_max,
-        host_max,
-        rss_max,
-        len(server_samples),
-    )
+    values = []
+    for watch in tracked:
+        values += ["%.3f" % v for v in watch.summary()]
+    line = ",".join(values + ["%.3f" % host_max, "%d" % samples])
 
     if args.summary:
         with open(args.summary, "w") as fh:
             fh.write(line + "\n")
     else:
-        sys.stdout.write(SUMMARY_HEADER + "\n" + line + "\n")
+        sys.stdout.write(summary_header(watches) + "\n" + line + "\n")
 
     return 0
 

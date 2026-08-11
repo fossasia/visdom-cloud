@@ -40,17 +40,21 @@ case "${1:-}" in
   *) echo "sweep: unknown argument $1" >&2; exit 2 ;;
 esac
 
+# The sampler owns its column names, so ask rather than repeat them here; the two
+# drifting apart would silently mislabel every result file.
+SAMPLER_HEADER="$(python3 "$HERE/cpu_sample.py" --print-header)"
+
 if [[ "$VIEWERS" -eq 1 ]]; then
   LEVELS="${BENCH_VIEWER_LEVELS:-1 10 25 50 100 200}"
   DRIVER_SCRIPT="viewbench.py"
   LEVEL_VAR="BENCH_VIEWERS"
   ROW_RE='^[0-9]{10},5,'
-  RESULT_HEADER="ts,scenario,viewers,writes,rate,elapsed_s,expected,delivered,drop_pct,p50_ms,p95_ms,p99_ms,max_ms,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+  RESULT_HEADER="ts,scenario,viewers,writes,rate,elapsed_s,expected,delivered,drop_pct,p50_ms,p95_ms,p99_ms,max_ms,$SAMPLER_HEADER"
 else
   DRIVER_SCRIPT="writebench.py"
   LEVEL_VAR="BENCH_CONC"
   ROW_RE='^[0-9]{10},4[ab],'
-  RESULT_HEADER="ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+  RESULT_HEADER="ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,$SAMPLER_HEADER"
 fi
 
 if [[ "$FLEET" -eq 1 ]]; then
