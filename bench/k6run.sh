@@ -17,9 +17,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
 
 SCENARIO="${1:-}"
-if [[ -z "$SCENARIO" || ! -f "$HERE/k6/${SCENARIO}.js" ]]; then
+if [[ -z "$SCENARIO" || "$SCENARIO" == "lib" || ! -f "$HERE/k6/${SCENARIO}.js" ]]; then
   echo "k6run: pass a scenario name; available:" >&2
-  ls "$HERE/k6" 2>/dev/null | sed 's/\.js$//' | sed 's/^/  /' >&2
+  ls "$HERE/k6" 2>/dev/null | sed 's/\.js$//' | grep -v '^lib$' | sed 's/^/  /' >&2
   exit 2
 fi
 
@@ -28,9 +28,23 @@ SMOKE=0
 
 cd "$ROOT"
 
-# The gateway is uvicorn; Postgres forks a backend per connection, so both are matched
-# by substring and summed rather than tracked as single pids.
-WATCH=(--watch "gateway=uvicorn" --watch "db=postgres:")
+DRIVER="$HERE/k6/${SCENARIO}.js"
+
+# Each scenario declares its own CSV columns and the processes worth sampling, so
+# neither is repeated here and adding a scenario needs no change to this script.
+js_const() {
+  sed -n "s/^export const $1 = *'\(.*\)';\$/\1/p" "$DRIVER" | tail -n 1
+}
+
+WATCH_SPEC="$(js_const WATCH)"
+if [[ -z "$WATCH_SPEC" ]]; then
+  echo "k6run: ${SCENARIO}.js does not export WATCH" >&2
+  exit 1
+fi
+WATCH=()
+for spec in $WATCH_SPEC; do
+  WATCH+=(--watch "$spec")
+done
 
 if [[ "$SMOKE" -eq 1 ]]; then
   echo "k6run: smoke check ($SCENARIO)"
@@ -56,8 +70,7 @@ STAMP="$(date +%F-%H%M)"
 RESULTS="$HERE/results/${STAMP}-k6-${SCENARIO}.csv"
 RAW="$HERE/results/${STAMP}-k6-${SCENARIO}-raw.csv"
 
-DRIVER_HEADER="$(sed -n "s/^export const CSV_HEADER =$//p;s/^ *'\(.*\)';$/\1/p" \
-  "$HERE/k6/${SCENARIO}.js" | tail -n 1)"
+DRIVER_HEADER="$(js_const CSV_HEADER)"
 if [[ -z "$DRIVER_HEADER" ]]; then
   echo "k6run: ${SCENARIO}.js does not export CSV_HEADER" >&2
   exit 1

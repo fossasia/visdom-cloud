@@ -11,19 +11,28 @@
 // rather than as VUs politely waiting. A closed model would hide the knee.
 //
 //   BENCH_USERS   accounts to seed and log in as (default 20)
-//   BENCH_RATES   comma-separated logins/sec stages (default 2,5,10,20,40)
+//   BENCH_RATES   comma-separated logins/sec stages (default 1,2,4,6,8,12)
 //   BENCH_STAGE   seconds per stage (default 30)
 
 import http from 'k6/http';
 import { check } from 'k6';
+import {
+  BASE,
+  NO_REQUESTS,
+  PASSWORD,
+  SUMMARY_TREND_STATS,
+  dropped,
+  noRequests,
+  registerUsers,
+  settle,
+  trend,
+} from './lib.js';
 
-const BASE = __ENV.BENCH_BASE || 'http://proxy';
 const USERS = parseInt(__ENV.BENCH_USERS || '20', 10);
 // Measured ceiling is around 5-6/s, so the useful range sits either side of that.
 // Asking for 40/s only produced a 30s queue and told us nothing extra.
 const RATES = (__ENV.BENCH_RATES || '1,2,4,6,8,12').split(',').map(Number);
 const STAGE = parseInt(__ENV.BENCH_STAGE || '30', 10);
-const PASSWORD = 'benchmark-password';
 
 export const options = {
   scenarios: {
@@ -42,31 +51,15 @@ export const options = {
   thresholds: {
     checks: ['rate>0.99'],
   },
-  // p(99) is not in k6's default set, and asking for it after the fact yields
-  // undefined rather than an error.
-  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
+  // Seeding is bcrypt too, and it runs against a gateway that may still be busy, so
+  // the default 60s is not enough headroom to distinguish slow from broken.
+  setupTimeout: '10m',
+  summaryTrendStats: SUMMARY_TREND_STATS,
 };
 
-// Not a .local address: the gateway validates with email_validator, which rejects
-// special-use and reserved names.
-function email(i) {
-  return `k6-login-${i}@example.com`;
-}
-
 export function setup() {
-  const created = [];
-  for (let i = 0; i < USERS; i += 1) {
-    const payload = JSON.stringify({ email: email(i), password: PASSWORD });
-    const res = http.post(`${BASE}/api/v1/auth/register`, payload, {
-      headers: { 'Content-Type': 'application/json' },
-    });
-    // 400 means the account survived an earlier run, which is fine to reuse.
-    if (res.status !== 201 && res.status !== 400) {
-      throw new Error(`seeding ${email(i)} failed: ${res.status} ${res.body}`);
-    }
-    created.push(email(i));
-  }
-  return { users: created };
+  settle();
+  return { users: registerUsers('login', USERS) };
 }
 
 export default function (data) {
@@ -80,18 +73,12 @@ export default function (data) {
 }
 
 export function handleSummary(data) {
-  // Without this, a run that failed in setup dies here on a missing metric and the
-  // TypeError buries the error that actually mattered.
-  if (!data.metrics.http_reqs || !data.metrics.http_reqs.values.count) {
-    return { stdout: 'k6: no requests completed, see the errors above\n' };
+  if (noRequests(data)) {
+    return NO_REQUESTS;
   }
 
-  const d = data.metrics.http_req_duration.values;
+  const d = trend(data, 'http_req_duration');
   const reqs = data.metrics.http_reqs.values;
-  const failed = data.metrics.http_req_failed.values.passes || 0;
-  const dropped = data.metrics.dropped_iterations
-    ? data.metrics.dropped_iterations.values.count
-    : 0;
 
   const row = [
     Math.floor(Date.now() / 1000),
@@ -104,8 +91,8 @@ export function handleSummary(data) {
     d['p(95)'].toFixed(1),
     d['p(99)'].toFixed(1),
     d.max.toFixed(1),
-    failed,
-    dropped,
+    data.metrics.http_req_failed.values.passes || 0,
+    dropped(data),
   ].join(',');
 
   // stdout only: /scripts is mounted read-only, and writing a file there fails the
@@ -113,5 +100,6 @@ export function handleSummary(data) {
   return { stdout: `${row}\n` };
 }
 
-export const CSV_HEADER =
-  'ts,scenario,users,peak_rate,requests,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,dropped';
+export const WATCH = 'gateway=uvicorn db=postgres:';
+
+export const CSV_HEADER = 'ts,scenario,users,peak_rate,requests,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,dropped';

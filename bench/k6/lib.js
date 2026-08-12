@@ -1,0 +1,125 @@
+// Shared setup for the k6 gateway scenarios.
+//
+// Every scenario needs the same three things before it can measure anything:
+// accounts that exist, sessions to carry, and a gateway that is not still draining
+// from the previous run. Keeping them here means a fix to any of the three lands in
+// every scenario at once.
+
+import http from 'k6/http';
+import { sleep } from 'k6';
+
+export const BASE = __ENV.BENCH_BASE || 'http://proxy';
+export const PASSWORD = 'benchmark-password';
+
+// p(99) is not in k6's default set, and asking for it after the fact yields
+// undefined rather than an error.
+export const SUMMARY_TREND_STATS = ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'];
+
+// Not a .local address: the gateway validates with email_validator, which rejects
+// special-use and reserved names.
+export function email(prefix, i) {
+  return `k6-${prefix}-${i}@example.com`;
+}
+
+export function registerUsers(prefix, count) {
+  const users = [];
+  for (let i = 0; i < count; i += 1) {
+    const address = email(prefix, i);
+    const res = http.post(
+      `${BASE}/api/v1/auth/register`,
+      JSON.stringify({ email: address, password: PASSWORD }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    // 400 means the account survived an earlier run, which is fine to reuse.
+    if (res.status !== 201 && res.status !== 400) {
+      throw new Error(`seeding ${address} failed: ${res.status} ${res.body}`);
+    }
+    users.push(address);
+  }
+  return users;
+}
+
+// The auth gate reads the session_token cookie, which login sets to the same value
+// it returns in the body. Carrying it explicitly rather than through k6's cookie jar
+// keeps each seeded session distinct, and distinct sessions are distinct entries in
+// the nginx auth cache.
+export function openSessions(users) {
+  return users.map((address) => {
+    const res = http.post(`${BASE}/api/v1/auth/login`, {
+      username: address,
+      password: PASSWORD,
+    });
+    if (res.status !== 200) {
+      throw new Error(`login ${address} failed: ${res.status} ${res.body}`);
+    }
+    return { email: address, token: res.json('access_token') };
+  });
+}
+
+export function cookieFor(session) {
+  return { Cookie: `session_token=${session.token}` };
+}
+
+export function bearerFor(session) {
+  return { Authorization: `Bearer ${session.token}` };
+}
+
+export function ensureWorkspace(session, slug) {
+  const res = http.post(
+    `${BASE}/api/v1/workspaces`,
+    JSON.stringify({ name: slug, slug }),
+    { headers: { 'Content-Type': 'application/json', ...bearerFor(session) } }
+  );
+  // 400 is the slug already existing, which is the normal case on a repeat run.
+  if (res.status !== 201 && res.status !== 400) {
+    throw new Error(`creating workspace ${slug} failed: ${res.status} ${res.body}`);
+  }
+  return slug;
+}
+
+// A saturated gateway keeps answering slowly for minutes after the load stops, so a
+// run started too soon measures the previous run's queue instead of its own. Wait for
+// several quick health checks in a row, not just one, since the first request to
+// arrive after a backlog drains can be quick by luck.
+export function settle(timeoutSeconds = 180, quickMs = 500) {
+  const deadline = Date.now() + timeoutSeconds * 1000;
+  let quick = 0;
+  while (Date.now() < deadline) {
+    const started = Date.now();
+    const res = http.get(`${BASE}/api/v1/health`, { timeout: '15s' });
+    if (res.status === 200 && Date.now() - started < quickMs) {
+      quick += 1;
+      if (quick >= 3) {
+        return;
+      }
+    } else {
+      quick = 0;
+    }
+    sleep(1);
+  }
+  throw new Error(
+    `gateway still slow after ${timeoutSeconds}s; it is probably draining a previous run`
+  );
+}
+
+// Without this, a run that failed in setup dies in handleSummary on a missing metric
+// and the TypeError buries the error that actually mattered.
+export function noRequests(data) {
+  return !data.metrics.http_reqs || !data.metrics.http_reqs.values.count;
+}
+
+export const NO_REQUESTS = {
+  stdout: 'k6: no requests completed, see the errors above\n',
+};
+
+export function trend(data, name) {
+  const metric = data.metrics[name];
+  if (!metric) {
+    return { avg: 0, med: 0, max: 0, 'p(95)': 0, 'p(99)': 0 };
+  }
+  return metric.values;
+}
+
+export function dropped(data) {
+  return data.metrics.dropped_iterations ? data.metrics.dropped_iterations.values.count : 0;
+}

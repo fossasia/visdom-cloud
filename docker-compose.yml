@@ -104,11 +104,14 @@ services:
     working_dir: /scripts
     volumes:
       - ./bench/k6:/scripts:ro
+    # Passed through empty rather than defaulted, so each scenario's own defaults
+    # apply unless the caller overrides them.
     environment:
       BENCH_BASE: http://proxy:${NGINX_PORT}
-      BENCH_USERS: ${BENCH_USERS:-20}
-      BENCH_RATES: ${BENCH_RATES:-2,5,10,20,40}
-      BENCH_STAGE: ${BENCH_STAGE:-30}
+      BENCH_USERS: ${BENCH_USERS:-}
+      BENCH_RATES: ${BENCH_RATES:-}
+      BENCH_STAGE: ${BENCH_STAGE:-}
+      BENCH_WORKSPACE: ${BENCH_WORKSPACE:-}
     depends_on:
       - proxy
 
