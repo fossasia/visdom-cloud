@@ -7,6 +7,7 @@
 
 import http from 'k6/http';
 import { sleep } from 'k6';
+import { Counter } from 'k6/metrics';
 
 export const BASE = __ENV.BENCH_BASE || 'http://proxy';
 export const PASSWORD = 'benchmark-password';
@@ -125,4 +126,19 @@ export function trend(data, name) {
 
 export function dropped(data) {
   return data.metrics.dropped_iterations ? data.metrics.dropped_iterations.values.count : 0;
+}
+
+// Counted here rather than read off http_req_failed, which also sees setup. Seeding
+// re-registers accounts that survived an earlier run and takes an expected 400 for
+// each, so http_req_failed reports one error per seeded user on every clean run.
+const failures = new Counter('workload_failures');
+
+export function recordFailure(res) {
+  if (res.status === 0 || res.status >= 400) {
+    failures.add(1);
+  }
+}
+
+export function failed(data) {
+  return data.metrics.workload_failures ? data.metrics.workload_failures.values.count : 0;
 }

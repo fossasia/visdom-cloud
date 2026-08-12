@@ -22,7 +22,9 @@ import {
   PASSWORD,
   SUMMARY_TREND_STATS,
   dropped,
+  failed,
   noRequests,
+  recordFailure,
   registerUsers,
   settle,
   trend,
@@ -69,6 +71,7 @@ export default function (data) {
     { username: user, password: PASSWORD },
     { tags: { name: 'login' } }
   );
+  recordFailure(res);
   check(res, { 'credentials accepted': (r) => r.status !== 401 && r.status !== 403 });
 }
 
@@ -91,7 +94,7 @@ export function handleSummary(data) {
     d['p(95)'].toFixed(1),
     d['p(99)'].toFixed(1),
     d.max.toFixed(1),
-    data.metrics.http_req_failed.values.passes || 0,
+    failed(data),
     dropped(data),
   ].join(',');
 

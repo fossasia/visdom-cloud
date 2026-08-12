@@ -26,8 +26,10 @@ import {
   cookieFor,
   dropped,
   ensureWorkspace,
+  failed,
   noRequests,
   openSessions,
+  recordFailure,
   registerUsers,
   settle,
   trend,
@@ -137,9 +139,14 @@ export default function (data) {
 
   const requests = data.assets.map((path) => ['GET', `${BASE}${path}`, null, { headers }]);
   const assets = http.batch(requests);
-  assets.forEach((res) => assetTime.add(res.timings.duration));
+  assets.forEach((res) => {
+    assetTime.add(res.timings.duration);
+    recordFailure(res);
+  });
   assetsFetched.add(assets.length);
 
+  recordFailure(verify);
+  recordFailure(page);
   check(page, { 'page served': (r) => r.status === 200 });
   check(verify, { 'session accepted': (r) => r.status === 200 });
 }
@@ -168,7 +175,7 @@ export function handleSummary(data) {
     verify.med.toFixed(1),
     verify['p(95)'].toFixed(1),
     asset['p(95)'].toFixed(1),
-    data.metrics.http_req_failed.values.passes || 0,
+    failed(data),
     dropped(data),
   ].join(',');
 
