@@ -65,13 +65,17 @@ export const options = {
 };
 
 // Absolute same-origin paths only. visdom is told its base is /vis, so its assets sit
-// outside the /vis/w/<slug>/ prefix and are fetched as served.
+// outside the /vis/w/<slug>/ prefix and are fetched as served. It also writes most of
+// its attribute values unquoted, so all three forms have to be accepted.
 function assetPaths(html) {
   const found = new Set();
-  const pattern = /(?:src|href)="(\/[^"]+)"/g;
+  const pattern = /(?:src|href)=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
   let match = pattern.exec(html);
   while (match !== null && found.size < MAX_ASSETS) {
-    found.add(match[1]);
+    const path = match[1] || match[2] || match[3];
+    if (path && path.startsWith('/')) {
+      found.add(path);
+    }
     match = pattern.exec(html);
   }
   return Array.from(found);

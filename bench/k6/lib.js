@@ -103,9 +103,12 @@ export function settle(timeoutSeconds = 180, quickMs = 500) {
 }
 
 // Without this, a run that failed in setup dies in handleSummary on a missing metric
-// and the TypeError buries the error that actually mattered.
+// and the TypeError buries the error that actually mattered. Keyed on iterations
+// rather than requests, because setup issues requests of its own and those alone are
+// enough to make a run that never reached its workload look like it produced data.
 export function noRequests(data) {
-  return !data.metrics.http_reqs || !data.metrics.http_reqs.values.count;
+  const iterations = data.metrics.iterations;
+  return !data.metrics.http_reqs || !iterations || !iterations.values.count;
 }
 
 export const NO_REQUESTS = {
