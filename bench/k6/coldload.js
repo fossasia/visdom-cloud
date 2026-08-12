@@ -12,7 +12,7 @@
 // hardcoded, so the run follows whatever the visdom build actually ships.
 //
 //   BENCH_USERS      distinct sessions to hold (default 10)
-//   BENCH_RATES      comma-separated page loads/sec stages (default 1,2,5,10,20)
+//   BENCH_RATES      comma-separated page loads/sec stages (default 5,10,25,50,100)
 //   BENCH_STAGE      seconds per stage (default 30)
 //   BENCH_WORKSPACE  slug prefix, one workspace per session (default k6-cold)
 
@@ -34,7 +34,8 @@ import {
 } from './lib.js';
 
 const USERS = parseInt(__ENV.BENCH_USERS || '10', 10);
-const RATES = (__ENV.BENCH_RATES || '1,2,5,10,20').split(',').map(Number);
+// 20/s left the gateway at 0.06 cores, so the useful range starts well above that.
+const RATES = (__ENV.BENCH_RATES || '5,10,25,50,100').split(',').map(Number);
 const STAGE = parseInt(__ENV.BENCH_STAGE || '30', 10);
 const WORKSPACE = __ENV.BENCH_WORKSPACE || 'k6-cold';
 const MAX_ASSETS = 40;
@@ -64,6 +65,24 @@ export const options = {
   summaryTrendStats: SUMMARY_TREND_STATS,
 };
 
+// visdom links its optional user stylesheet as /vis/static/../user/style.css. A browser
+// resolves that before it ever hits the wire; sending the dots verbatim earns a 403
+// from Tornado's static handler and a phantom error in the results.
+function normalize(path) {
+  const parts = [];
+  path.split('/').forEach((segment) => {
+    if (segment === '' || segment === '.') {
+      return;
+    }
+    if (segment === '..') {
+      parts.pop();
+    } else {
+      parts.push(segment);
+    }
+  });
+  return `/${parts.join('/')}`;
+}
+
 // Absolute same-origin paths only. visdom is told its base is /vis, so its assets sit
 // outside the /vis/w/<slug>/ prefix and are fetched as served. It also writes most of
 // its attribute values unquoted, so all three forms have to be accepted.
@@ -74,7 +93,7 @@ function assetPaths(html) {
   while (match !== null && found.size < MAX_ASSETS) {
     const path = match[1] || match[2] || match[3];
     if (path && path.startsWith('/')) {
-      found.add(path);
+      found.add(normalize(path));
     }
     match = pattern.exec(html);
   }
