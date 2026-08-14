@@ -176,17 +176,27 @@ def main():
 
     tracked = [Watch(name, markers) for name, markers in watches]
     for watch in tracked:
-        if not watch.previous:
+        if watch.previous:
             sys.stderr.write(
-                "cpu_sample: no process matching %s found for watch %r. Is the "
-                "container up, and is this running on the VM host rather than inside "
-                "a container?\n" % (list(watch.markers), watch.name)
+                "cpu_sample: watching %d process(es) as %r\n"
+                % (len(watch.previous), watch.name)
             )
-            return 2
+        else:
+            # Not fatal on its own: the sampler starts before the driver container, so
+            # its watch is legitimately empty here and membership is re-resolved every
+            # tick. Only nothing matching anywhere means the caller is in the wrong PID
+            # namespace, which is the mistake worth stopping for.
+            sys.stderr.write(
+                "cpu_sample: nothing matching %s yet for watch %r; will keep looking\n"
+                % (list(watch.markers), watch.name)
+            )
+
+    if not any(watch.previous for watch in tracked):
         sys.stderr.write(
-            "cpu_sample: watching %d process(es) as %r\n"
-            % (len(watch.previous), watch.name)
+            "cpu_sample: no process matched any watch. Is the stack up, and is this "
+            "running on the VM host rather than inside a container?\n"
         )
+        return 2
 
     raw = open(args.raw, "w") if args.raw else None
     if raw:
