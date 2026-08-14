@@ -115,9 +115,14 @@ server {
         proxy_set_header X-API-KEY $http_x_api_key;
 
         # Keyed on the credential alone; the gate reads nothing else.
+        #
+        # This window is also how long a logged-out session or a revoked key keeps
+        # working, so it is kept as short as the gateway can afford. A verify costs
+        # 2.4 ms measured (bench/README.md, scenario 3) against a page load of 21 ms,
+        # so paying it six times more often than the previous 30 s does not register.
         proxy_cache auth_cache;
         proxy_cache_key "$cookie_session_token|$http_x_api_key";
-        proxy_cache_valid 200 30s;
+        proxy_cache_valid 200 5s;
         proxy_cache_valid 401 403 5s;
         proxy_ignore_headers Set-Cookie Cache-Control Expires;
         proxy_hide_header Set-Cookie;

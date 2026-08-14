@@ -18,8 +18,11 @@
 #
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$HERE")"
+BENCH_TOOL=sweep
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+HERE="$BENCH_HERE"
+ROOT="$BENCH_ROOT"
 
 KIND="${BENCH_KIND:-line}"
 MODE="${BENCH_MODE:-proc}"
@@ -40,17 +43,19 @@ case "${1:-}" in
   *) echo "sweep: unknown argument $1" >&2; exit 2 ;;
 esac
 
+SAMPLER_HEADER="$(bench_sampler_header)"
+
 if [[ "$VIEWERS" -eq 1 ]]; then
   LEVELS="${BENCH_VIEWER_LEVELS:-1 10 25 50 100 200}"
   DRIVER_SCRIPT="viewbench.py"
   LEVEL_VAR="BENCH_VIEWERS"
   ROW_RE='^[0-9]{10},5,'
-  RESULT_HEADER="ts,scenario,viewers,writes,rate,elapsed_s,expected,delivered,drop_pct,p50_ms,p95_ms,p99_ms,max_ms,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+  RESULT_HEADER="ts,scenario,viewers,writes,rate,elapsed_s,expected,delivered,drop_pct,p50_ms,p95_ms,p99_ms,max_ms,$SAMPLER_HEADER"
 else
   DRIVER_SCRIPT="writebench.py"
   LEVEL_VAR="BENCH_CONC"
   ROW_RE='^[0-9]{10},4[ab],'
-  RESULT_HEADER="ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,visdom_cores_mean,visdom_cores_max,bench_cores_max,host_cores_max,visdom_rss_mb_max,samples"
+  RESULT_HEADER="ts,scenario,kind,mode,conc,n_ops,elapsed_s,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,$SAMPLER_HEADER"
 fi
 
 if [[ "$FLEET" -eq 1 ]]; then
@@ -65,12 +70,8 @@ fi
 
 cd "$ROOT"
 
-compose_run() {
-  docker compose --profile bench run --rm --no-deps -T "$@"
-}
-
 driver() {
-  compose_run -e BENCH_WORKSPACE="$WORKSPACE" "$@" bench python "$DRIVER_SCRIPT"
+  bench_compose_run -e BENCH_WORKSPACE="$WORKSPACE" "$@" bench python "$DRIVER_SCRIPT"
 }
 
 if [[ "$SMOKE" -eq 1 ]]; then
@@ -111,17 +112,13 @@ mkdir -p "$RAWDIR"
 
 echo "$RESULT_HEADER" > "$RESULTS"
 
-SAMPLER=""
 FLEET_UP=0
 cleanup() {
-  if [[ -n "$SAMPLER" ]] && kill -0 "$SAMPLER" 2>/dev/null; then
-    kill -TERM "$SAMPLER" 2>/dev/null || true
-    wait "$SAMPLER" 2>/dev/null || true
-  fi
+  bench_sampler_stop
   if [[ "$FLEET_UP" -eq 1 ]]; then
     echo
     echo "sweep: tearing down the fleet"
-    compose_run -v "$MANIFEST:/bench/fleet.json:ro" bench \
+    bench_compose_run -v "$MANIFEST:/bench/fleet.json:ro" bench \
       python fleet.py teardown --manifest /bench/fleet.json || {
         echo "sweep: teardown failed. Clean up with:" >&2
         echo "  docker compose --profile bench run --rm -T bench \\" >&2
@@ -137,7 +134,7 @@ if [[ "$FLEET" -eq 1 ]]; then
   MAX=0
   for level in $LEVELS; do [[ "$level" -gt "$MAX" ]] && MAX="$level"; done
   echo "sweep: creating $MAX workspaces and keys (prefix $PREFIX)"
-  if ! compose_run bench python fleet.py setup --count "$MAX" --prefix "$PREFIX" > "$MANIFEST"; then
+  if ! bench_compose_run bench python fleet.py setup --count "$MAX" --prefix "$PREFIX" > "$MANIFEST"; then
     FLEET_UP=1
     echo "sweep: fleet setup failed; the partial manifest is at $MANIFEST" >&2
     exit 1
@@ -154,14 +151,10 @@ for level in $LEVELS; do
     echo "sweep: $SCENARIO kind=$KIND conc=$level ops=$OPS"
   fi
 
-  raw="$RAWDIR/level-${level}.csv"
   summary="$(mktemp)"
   stdout="$(mktemp)"
-  row="$(mktemp)"
 
-  python3 "$HERE/cpu_sample.py" --raw "$raw" --summary "$summary" &
-  SAMPLER=$!
-  sleep 2
+  bench_sampler_start "$RAWDIR/level-${level}.csv" "$summary"
 
   driver "${DRIVER_ARGS[@]}" \
     -e "$LEVEL_VAR=$level" \
@@ -173,23 +166,11 @@ for level in $LEVELS; do
     -e BENCH_TAG="sw${level}_" \
     > "$stdout"
 
-  kill -TERM "$SAMPLER" 2>/dev/null || true
-  wait "$SAMPLER" 2>/dev/null || true
-  SAMPLER=""
-
-  grep -E "$ROW_RE" "$stdout" | tail -n 1 > "$row"
-  if [[ ! -s "$row" ]]; then
-    echo "sweep: no result row from level=$level; driver output was:" >&2
-    cat "$stdout" >&2
-    exit 1
-  fi
-
-  paste -d, "$row" "$summary" >> "$RESULTS"
-  rm -f "$summary" "$stdout" "$row"
+  bench_sampler_stop
+  bench_record_row "$stdout" "$summary" "$RESULTS" "$ROW_RE" "level=$level"
+  rm -f "$summary" "$stdout"
 
   sleep "$SETTLE"
 done
 
-echo
-echo "sweep: done -> $RESULTS"
-column -s, -t < "$RESULTS"
+bench_report "$RESULTS"
