@@ -28,14 +28,15 @@ shortenable to 5 s.
 | File | Runs where | Purpose |
 |---|---|---|
 | `sweep.sh` | VM host | orchestrates a concurrency sweep, writes `results/` |
-| `cpu_sample.py` | VM host | samples visdom / generator / host CPU into CSV |
+| `lib.sh` | VM host | sampler and result-row plumbing, shared by both runners |
+| `cpu_sample.py` | VM host | samples any named process groups plus the host into CSV |
 | `writebench.py` | `bench` container | scenario 4 — N writers |
 | `viewbench.py` | `bench` container | scenario 5 — N viewers watching one workspace |
 | `shardcheck.py` | `bench` container | asserts nginx routes each workspace to one instance |
 | `fleet.py` | `bench` container | creates and destroys 4b's throwaway workspaces and keys |
 | `Dockerfile`, `requirements.txt` | — | the generator image |
 | `k6run.sh` | VM host | runs one k6 scenario with the sampler attached |
-| `k6/lib.js` | `k6` container | seeding, sessions and the settle wait, shared by the scenarios |
+| `k6/lib.js` | `k6` container | seeding, sessions, the settle wait and the executor options |
 | `k6/login.js` | `k6` container | scenario 1 — login storm |
 | `k6/coldload.js` | `k6` container | scenario 3 — cold visdom page load |
 
