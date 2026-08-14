@@ -20,8 +20,8 @@ plateaus. Numbers in [Results](#results).
 **The gateway in front of it is not the binding constraint.** It is the one component that
 does not shard, so it was the obvious suspect, but it serves ~12 logins/s (bcrypt-bound, by
 design) and stayed at 0.08 cores while cold page loads saturated the host. The auth check
-it exists to answer costs 2.4 ms, which is what makes the 30 s nginx cache window
-shortenable to 5 s.
+it exists to answer costs 2.4 ms, which is what let the nginx cache window drop from 30 s
+to 5 s and close the revocation gap six times faster.
 
 ## Layout
 
@@ -276,9 +276,10 @@ exactly the extra cost of shortening the nginx auth cache window.
 | 20/s | 854 | 21.5 ms | 27.6 ms | **2.4 ms** | 2.9 ms | 0 | 1.32 | 2.27 |
 | 100/s | 3,276 | 164.7 ms | 884.4 ms | 87.8 ms | 5,133 ms | **998** | 2.25 | **4.00** |
 
-**The auth check costs 2.4 ms, so the 30 s cache window can safely become 5 s.** That
-window is also how long a logged-out session keeps working, so shortening it closes the
-revocation gap six times faster for a cost that does not register.
+**The auth check costs 2.4 ms, so the cache window dropped from 30 s to 5 s.** That window
+is also how long a logged-out session keeps working, so shortening it closes the revocation
+gap six times faster for a cost that does not register: 2.4 ms against a 21 ms page load,
+on a gateway that never rose above 0.08 cores.
 
 **Where it breaks is not the gateway.** At 100 loads/s the gateway sat at 0.08 cores while
 the host was pegged at 4.00. The work is visdom serving 19 static files per load, plus the
@@ -327,7 +328,9 @@ state that would have to be split is the same.
 - Levels ran 0.2 s to 15.7 s, giving 3–19 CPU samples each. The high-concurrency line
   figures (0.95, 0.98) are trustworthy; the low-concurrency ones are diluted by the
   sampler's 2 s lead-in and should be read as "well under one core", not as exact.
-- Except where stated, every run is warm-cache (nginx 30 s, `WorkspaceManager` 45 s).
+- Except where stated, every run is warm-cache. The 4a, 4b and 5 figures were taken while
+  the nginx auth gate cached for 30 s; it is 5 s now, which shortens the warm window but
+  not the steady-state cost those runs measured.
 - Specific to 4 OCPU ARM and to code that still has a synchronous gateway call on the
   event loop.
 - Scenario 2 (dashboard browse) is not measured; anything said about it is reasoning, not
@@ -353,7 +356,7 @@ hardcoded, so the run tracks whatever the visdom build actually ships, and dot s
 resolved the way a browser resolves them before the request leaves.
 
 **4a** — every writer shares one workspace and one key. After the first request the auth
-caches are warm (nginx 30 s, `WorkspaceManager` 45 s), so the gateway is barely consulted.
+caches are warm (nginx 5 s, `WorkspaceManager` 45 s), so the gateway is barely consulted.
 That isolates plot serialization CPU, which is what "does visdom pin a core" asks.
 
 **4b** — every writer gets its own workspace and its own key, so each pays a cold gateway
@@ -508,7 +511,7 @@ Carried from `BENCHMARKING.md` §3, because they have already cost one voided ru
 2. **Generate load on the VM, not a laptop.**
 3. **A generator inside the visdom container inflates that container's `docker stats`.**
    This is why the `bench` container exists and why the sampler reads `/proc` directly.
-4. **Caches flatten sustained runs** — nginx auth gate 30 s, `WorkspaceManager` 45 s. This
+4. **Caches flatten sustained runs** — nginx auth gate 5 s, `WorkspaceManager` 45 s. This
    measures steady-state serialization, not cold resolve.
 5. **Payload type dominates plot count.** `line` is near best case; `image` is base64 and
    orders of magnitude heavier. The gap between the two is the most useful single number
