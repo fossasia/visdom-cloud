@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Runs a k6 scenario on the VM host with cpu_sample.py watching the gateway and
-# Postgres, and appends one merged row to bench/results/.
+# Runs a k6 scenario on the VM host with cpu_sample.py watching, and appends one merged
+# row to bench/results/.
 #
 #   ./bench/k6run.sh login          # scenario 1, login storm
 #   BENCH_RATES=2,5 BENCH_STAGE=10 ./bench/k6run.sh login --smoke
@@ -13,22 +13,21 @@
 #
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$HERE")"
+BENCH_TOOL=k6run
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
 SCENARIO="${1:-}"
-if [[ -z "$SCENARIO" || "$SCENARIO" == "lib" || ! -f "$HERE/k6/${SCENARIO}.js" ]]; then
+DRIVER="$BENCH_HERE/k6/${SCENARIO}.js"
+if [[ -z "$SCENARIO" || "$SCENARIO" == "lib" || ! -f "$DRIVER" ]]; then
   echo "k6run: pass a scenario name; available:" >&2
-  ls "$HERE/k6" 2>/dev/null | sed 's/\.js$//' | grep -v '^lib$' | sed 's/^/  /' >&2
+  ls "$BENCH_HERE/k6" 2>/dev/null | sed 's/\.js$//' | grep -v '^lib$' | sed 's/^/  /' >&2
   exit 2
 fi
 
 SMOKE=0
 [[ "${2:-}" == "--smoke" ]] && SMOKE=1
 
-cd "$ROOT"
-
-DRIVER="$HERE/k6/${SCENARIO}.js"
+cd "$BENCH_ROOT"
 
 # Each scenario declares its own CSV columns and the processes worth sampling, so
 # neither is repeated here and adding a scenario needs no change to this script.
@@ -36,89 +35,65 @@ js_const() {
   sed -n "s/^export const $1 = *'\(.*\)';\$/\1/p" "$DRIVER" | tail -n 1
 }
 
-WATCH_SPEC="$(js_const WATCH)"
-if [[ -z "$WATCH_SPEC" ]]; then
-  echo "k6run: ${SCENARIO}.js does not export WATCH" >&2
-  exit 1
-fi
+require_const() {
+  local value
+  value="$(js_const "$1")"
+  if [[ -z "$value" ]]; then
+    echo "k6run: ${SCENARIO}.js does not export $1" >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
 WATCH=()
-for spec in $WATCH_SPEC; do
+for spec in $(require_const WATCH); do
   WATCH+=(--watch "$spec")
 done
+
+run_k6() {
+  bench_compose_run k6 run --quiet "/scripts/${SCENARIO}.js"
+}
 
 if [[ "$SMOKE" -eq 1 ]]; then
   echo "k6run: smoke check ($SCENARIO)"
   probe="$(mktemp)"
-  # k6 exits 0 even when handleSummary throws, so checking the exit code alone would
-  # call a run that produced nothing a pass. Insist on the CSV row.
-  BENCH_RATES=1 BENCH_STAGE=5 BENCH_USERS=2 \
-    docker compose --profile bench run --rm --no-deps -T k6 \
-      run --quiet "/scripts/${SCENARIO}.js" > "$probe" 2>&1 || true
+  trap 'rm -f "$probe"' EXIT
+  BENCH_RATES=1 BENCH_STAGE=5 BENCH_USERS=2 run_k6 > "$probe" 2>&1 || true
   if ! grep -qE '^[0-9]{10},' "$probe"; then
     echo "k6run: smoke produced no result row; output was:" >&2
     cat "$probe" >&2
-    rm -f "$probe"
     exit 1
   fi
-  rm -f "$probe"
   echo "k6run: smoke passed"
   exit 0
 fi
 
-mkdir -p "$HERE/results"
+mkdir -p "$BENCH_HERE/results"
 STAMP="$(date +%F-%H%M)"
-RESULTS="$HERE/results/${STAMP}-k6-${SCENARIO}.csv"
-RAW="$HERE/results/${STAMP}-k6-${SCENARIO}-raw.csv"
+RESULTS="$BENCH_HERE/results/${STAMP}-k6-${SCENARIO}.csv"
+RAW="$BENCH_HERE/results/${STAMP}-k6-${SCENARIO}-raw.csv"
 
-DRIVER_HEADER="$(js_const CSV_HEADER)"
-if [[ -z "$DRIVER_HEADER" ]]; then
-  echo "k6run: ${SCENARIO}.js does not export CSV_HEADER" >&2
-  exit 1
-fi
-SAMPLER_HEADER="$(python3 "$HERE/cpu_sample.py" "${WATCH[@]}" --print-header)"
-echo "${DRIVER_HEADER},${SAMPLER_HEADER}" > "$RESULTS"
+echo "$(require_const CSV_HEADER),$(bench_sampler_header "${WATCH[@]}")" > "$RESULTS"
 
 SUMMARY="$(mktemp)"
 STDOUT="$(mktemp)"
-ROW="$(mktemp)"
-
-SAMPLER=""
 cleanup() {
-  if [[ -n "$SAMPLER" ]] && kill -0 "$SAMPLER" 2>/dev/null; then
-    kill -TERM "$SAMPLER" 2>/dev/null || true
-    wait "$SAMPLER" 2>/dev/null || true
-  fi
-  rm -f "$SUMMARY" "$STDOUT" "$ROW"
+  bench_sampler_stop
+  rm -f "$SUMMARY" "$STDOUT"
 }
 trap cleanup EXIT
 
 echo "k6run: $SCENARIO rates=${BENCH_RATES:-default} stage=${BENCH_STAGE:-30}s"
 
-python3 "$HERE/cpu_sample.py" "${WATCH[@]}" --raw "$RAW" --summary "$SUMMARY" &
-SAMPLER=$!
-sleep 2
+bench_sampler_start "$RAW" "$SUMMARY" "${WATCH[@]}"
 
-docker compose --profile bench run --rm --no-deps -T k6 \
-  run --quiet "/scripts/${SCENARIO}.js" > "$STDOUT" || {
-    echo "k6run: k6 exited non-zero; its thresholds failed or the run errored." >&2
-    echo "k6run: output was:" >&2
-    cat "$STDOUT" >&2
-    exit 1
-  }
-
-kill -TERM "$SAMPLER" 2>/dev/null || true
-wait "$SAMPLER" 2>/dev/null || true
-SAMPLER=""
-
-grep -E '^[0-9]{10},' "$STDOUT" | tail -n 1 > "$ROW"
-if [[ ! -s "$ROW" ]]; then
-  echo "k6run: no result row from $SCENARIO; k6 output was:" >&2
+run_k6 > "$STDOUT" || {
+  echo "k6run: k6 exited non-zero; its thresholds failed or the run errored." >&2
+  echo "k6run: output was:" >&2
   cat "$STDOUT" >&2
   exit 1
-fi
+}
 
-paste -d, "$ROW" "$SUMMARY" >> "$RESULTS"
-
-echo
-echo "k6run: done -> $RESULTS"
-column -s, -t < "$RESULTS"
+bench_sampler_stop
+bench_record_row "$STDOUT" "$SUMMARY" "$RESULTS" '^[0-9]{10},' "$SCENARIO"
+bench_report "$RESULTS"

@@ -17,6 +17,12 @@ workspace, not a bigger VM and not a faster framework.
 consistent hashing reach 1.51 cores as a pool and 743 writes/s, and throughput no longer
 plateaus. Numbers in [Results](#results).
 
+**The gateway in front of it is not the binding constraint.** It is the one component that
+does not shard, so it was the obvious suspect, but it serves ~12 logins/s (bcrypt-bound, by
+design) and stayed at 0.08 cores while cold page loads saturated the host. The auth check
+it exists to answer costs 2.4 ms, which is what makes the 30 s nginx cache window
+shortenable to 5 s.
+
 ## Layout
 
 | File | Runs where | Purpose |
@@ -28,6 +34,10 @@ plateaus. Numbers in [Results](#results).
 | `shardcheck.py` | `bench` container | asserts nginx routes each workspace to one instance |
 | `fleet.py` | `bench` container | creates and destroys 4b's throwaway workspaces and keys |
 | `Dockerfile`, `requirements.txt` | — | the generator image |
+| `k6run.sh` | VM host | runs one k6 scenario with the sampler attached |
+| `k6/lib.js` | `k6` container | seeding, sessions and the settle wait, shared by the scenarios |
+| `k6/login.js` | `k6` container | scenario 1 — login storm |
+| `k6/coldload.js` | `k6` container | scenario 3 — cold visdom page load |
 
 `cpu_sample.py` runs on the **host**, not in a container: a container has its own PID
 namespace and cannot see the visdom server process at all. Standard library only, so
@@ -82,6 +92,21 @@ Any sweep can be narrowed with the level lists, which is how to iterate quickly:
 BENCH_LEVELS="1 10" BENCH_OPS=20 ./bench/sweep.sh
 BENCH_VIEWER_LEVELS="1 50 200" BENCH_RATE=20 ./bench/sweep.sh --viewers
 ```
+
+The gateway scenarios are k6 rather than the python generator, and need no credentials —
+they seed their own accounts:
+
+```bash
+./bench/k6run.sh login --smoke              # proves the plumbing, a few seconds
+./bench/k6run.sh login                      # scenario 1
+./bench/k6run.sh coldload                   # scenario 3
+BENCH_RATES=1,2,5,10,20 ./bench/k6run.sh coldload
+```
+
+Each scenario declares its own CSV columns and the processes worth sampling, so adding one
+needs no change to `k6run.sh`. Both wait for the gateway to answer quickly three times
+before seeding: a saturated gateway keeps answering slowly for minutes after the load
+stops, and a run started too soon measures the previous run's queue rather than its own.
 
 **Never run two scenarios at the same time.** They load the same server, so each becomes
 the other's noise and neither result means anything. Run them back to back.
@@ -209,6 +234,57 @@ threads contending on the GIL to timestamp arrivals. **Do not quote the 185 ms p
 server figure** — confirming real fan-out latency needs viewers spread across processes
 or machines.
 
+### 1 — login storm (2026-08-12)
+
+Every login runs bcrypt at cost factor 12, which is a few hundred milliseconds of CPU by
+design. The gateway does not shard and every visdom instance calls it, so if it saturates
+first then adding visdom instances buys nothing. Arrival rate is held regardless of how
+slow the server gets, so saturation shows as rising latency and dropped iterations rather
+than as clients politely waiting.
+
+| Peak rate | Requests | p50 | p95 | p99 | Dropped | gateway_cores_max |
+|---|---|---|---|---|---|---|
+| 12/s | 848 | 234 ms | 240 ms | 247 ms | 0 | **2.78** |
+| 40/s | 1,039 | 238 ms | 3,525 ms | **31,339 ms** | **361** | — |
+
+**The gateway keeps up to about 12 logins/s and falls over well before 40.** At 12/s
+nothing is dropped and p99 is a quarter of a second; the p50 of 234 ms is essentially pure
+bcrypt, with no queueing on top.
+
+That p50 is also the capacity formula. One core does `1 / 0.235` ≈ **4.25 logins/s**, and
+the gateway drew 2.78 cores at 12/s, which is what 12 / 4.25 predicts. Capacity is
+therefore cores ÷ 235 ms, and on a box shared with visdom and Postgres that lands near 12.
+
+Past the knee the failure is ugly rather than graceful: at 40/s a third of the attempts are
+dropped outright and the unlucky ones wait half a minute. The gateway also stays slow for
+minutes after the load stops, which is why the scenarios wait for it to settle.
+
+**This is not a reason to weaken bcrypt.** 12 logins/s is 43,000 an hour, and logins are
+bursty in a way that averages out: a thousand-person org all arriving over a ten minute
+window is under 2/s. If it ever binds, the fix is more gateway processes, which works here
+precisely because the gateway holds no per-request state.
+
+### 3 — cold visdom page load (2026-08-12)
+
+A first-time visit with an empty browser cache: the auth check, the page, then all 19
+assets it references. Each iteration also pays one uncached `/auth/verify`, which is
+exactly the extra cost of shortening the nginx auth cache window.
+
+| Peak rate | Loads | page p50 | page p95 | verify p50 | verify p95 | Dropped | visdom_cores_max | host_cores_max |
+|---|---|---|---|---|---|---|---|---|
+| 20/s | 854 | 21.5 ms | 27.6 ms | **2.4 ms** | 2.9 ms | 0 | 1.32 | 2.27 |
+| 100/s | 3,276 | 164.7 ms | 884.4 ms | 87.8 ms | 5,133 ms | **998** | 2.25 | **4.00** |
+
+**The auth check costs 2.4 ms, so the 30 s cache window can safely become 5 s.** That
+window is also how long a logged-out session keeps working, so shortening it closes the
+revocation gap six times faster for a cost that does not register.
+
+**Where it breaks is not the gateway.** At 100 loads/s the gateway sat at 0.08 cores while
+the host was pegged at 4.00. The work is visdom serving 19 static files per load, plus the
+load generator competing for the same four cores. Static assets are the one thing that
+should never reach Tornado at all: they are identical on every instance, so nginx can serve
+them directly and take the whole path off the shard.
+
 ### What this means in users
 
 Concurrency in the tables above is *simultaneous in-flight writes*, which is not a user
@@ -233,8 +309,8 @@ Three things this is not:
 - **One training run per user.** Someone running ten jobs counts as ten.
 - **Valid with the generator on the same box.** These figures assume load comes from
   elsewhere; here it was competing for the same four cores.
-- **Platform capacity.** Scenarios 1–3 — login storms, dashboard browsing, cold page
-  loads — are unmeasured, so this is write-path capacity only.
+- **The whole platform.** Logins cap at ~12/s and cold page loads at ~20/s, both measured
+  separately above. Scenario 2, dashboard browsing, is still unmeasured.
 
 ### What this means for scaling
 
@@ -253,10 +329,27 @@ state that would have to be split is the same.
 - Except where stated, every run is warm-cache (nginx 30 s, `WorkspaceManager` 45 s).
 - Specific to 4 OCPU ARM and to code that still has a synchronous gateway call on the
   event loop.
-- Scenarios 1–3 (login storm, dashboard browse, cold page load) are not measured;
-  anything said about them is reasoning, not data.
+- Scenario 2 (dashboard browse) is not measured; anything said about it is reasoning, not
+  data.
+- The k6 scenarios seed accounts that survive between runs, so a rerun re-registers them
+  and takes an expected 400 for each. The `errors` column counts workload failures only,
+  which is why it reads 0 on a clean run rather than one per seeded user.
 
 ## What each scenario measures
+
+**1** — logins are the most expensive thing the platform does per request, by design:
+bcrypt at cost factor 12 is hundreds of milliseconds of CPU that cannot be cached away.
+The gateway is also the only component that does not shard, so this asks whether the
+front door binds before visdom does. An open load model is the point — arrival rate is
+held whatever the server does, so the knee is visible instead of hidden behind clients
+that slow down in sympathy.
+
+**3** — a first visit with a cold browser cache, which is when the auth gate is felt: every
+request under `/vis/` passes it. Each iteration also pays one uncached `/auth/verify`
+straight to the gateway, so the run measures what a shorter cache window would cost while
+the rest of the load is happening. Assets are read out of the served HTML rather than
+hardcoded, so the run tracks whatever the visdom build actually ships, and dot segments are
+resolved the way a browser resolves them before the request leaves.
 
 **4a** — every writer shares one workspace and one key. After the first request the auth
 caches are warm (nginx 30 s, `WorkspaceManager` 45 s), so the gateway is barely consulted.
@@ -377,6 +470,13 @@ All environment variables:
 | `BENCH_WRITES` | `50` | writes the single writer sends (5) |
 | `BENCH_RATE` | `10` | writes per second (5) |
 | `BENCH_SETTLE` | `10` | seconds between levels |
+| `BENCH_USERS` | per scenario | accounts the k6 scenarios seed (1: 20, 3: 10) |
+| `BENCH_RATES` | per scenario | comma-separated arrival-rate stages (1: `1,2,4,6,8,12`, 3: `5,10,25,50,100`) |
+| `BENCH_STAGE` | `30` | seconds per k6 stage |
+
+The k6 defaults are deliberately different per scenario, because the useful range sits
+either side of each measured ceiling. Leave them unset unless narrowing a run; the compose
+service passes them through empty so each scenario's own defaults apply.
 
 ## Reading the output
 
@@ -425,7 +525,12 @@ conc=50 runs with 41 envs already resident; negligible for `line`, roughly 18 MB
 
 **4b** cleans up after itself — see "Who creates the workspaces" above.
 
+**1 and 3** leave seeded accounts (`k6-login-*@example.com`, `k6-cold-*@example.com`) and
+one workspace per cold-load session. They are reused on the next run rather than
+re-created, so leaving them is the cheaper option; delete them when the deployment is meant
+to look clean.
+
 ## Not here yet
 
-Scenarios 1–3 (login storm, dashboard browse, visdom cold page load) are k6 and land in
-`k6/`. See the design doc for the phasing.
+Scenario 2 (dashboard browse) is the remaining k6 scenario. See the design doc for the
+phasing.
