@@ -6,10 +6,6 @@
 // so this is a candidate for the real ceiling of the whole platform rather than of
 // visdom.
 //
-// An open model on purpose: arrival rate is held regardless of how slow the server
-// gets, so a saturated gateway shows up as rising latency and dropped iterations
-// rather than as VUs politely waiting. A closed model would hide the knee.
-//
 //   BENCH_USERS   accounts to seed and log in as (default 20)
 //   BENCH_RATES   comma-separated logins/sec stages (default 1,2,4,6,8,12)
 //   BENCH_STAGE   seconds per stage (default 30)
@@ -20,44 +16,25 @@ import {
   BASE,
   NO_REQUESTS,
   PASSWORD,
-  SUMMARY_TREND_STATS,
+  arrivalOptions,
   dropped,
   failed,
+  intEnv,
   noRequests,
+  ratesEnv,
   recordFailure,
   registerUsers,
   settle,
   trend,
 } from './lib.js';
 
-const USERS = parseInt(__ENV.BENCH_USERS || '20', 10);
-// Measured ceiling is around 5-6/s, so the useful range sits either side of that.
-// Asking for 40/s only produced a 30s queue and told us nothing extra.
-const RATES = (__ENV.BENCH_RATES || '1,2,4,6,8,12').split(',').map(Number);
-const STAGE = parseInt(__ENV.BENCH_STAGE || '30', 10);
+const USERS = intEnv('BENCH_USERS', 20);
+// Measured ceiling is around 12/s, so the useful range sits either side of that. Asking
+// for 40/s only produced a 30s queue and told us nothing extra.
+const RATES = ratesEnv('1,2,4,6,8,12');
+const STAGE = intEnv('BENCH_STAGE', 30);
 
-export const options = {
-  scenarios: {
-    login: {
-      executor: 'ramping-arrival-rate',
-      startRate: RATES[0],
-      timeUnit: '1s',
-      preAllocatedVUs: 50,
-      maxVUs: 400,
-      stages: RATES.map((rate) => ({ target: rate, duration: `${STAGE}s` })),
-    },
-  },
-  // The threshold guards credentials, not speed. A run of 401s would report a
-  // throughput that measures nothing and must fail; requests timing out because the
-  // gateway is saturated are the result we came for and must not.
-  thresholds: {
-    checks: ['rate>0.99'],
-  },
-  // Seeding is bcrypt too, and it runs against a gateway that may still be busy, so
-  // the default 60s is not enough headroom to distinguish slow from broken.
-  setupTimeout: '10m',
-  summaryTrendStats: SUMMARY_TREND_STATS,
-};
+export const options = arrivalOptions('login', RATES, STAGE);
 
 export function setup() {
   settle();

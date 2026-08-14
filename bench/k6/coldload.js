@@ -22,23 +22,25 @@ import { Counter, Trend } from 'k6/metrics';
 import {
   BASE,
   NO_REQUESTS,
-  SUMMARY_TREND_STATS,
+  arrivalOptions,
   cookieFor,
   dropped,
   ensureWorkspace,
   failed,
+  intEnv,
   noRequests,
   openSessions,
+  ratesEnv,
   recordFailure,
   registerUsers,
   settle,
   trend,
 } from './lib.js';
 
-const USERS = parseInt(__ENV.BENCH_USERS || '10', 10);
+const USERS = intEnv('BENCH_USERS', 10);
 // 20/s left the gateway at 0.06 cores, so the useful range starts well above that.
-const RATES = (__ENV.BENCH_RATES || '5,10,25,50,100').split(',').map(Number);
-const STAGE = parseInt(__ENV.BENCH_STAGE || '30', 10);
+const RATES = ratesEnv('5,10,25,50,100');
+const STAGE = intEnv('BENCH_STAGE', 30);
 const WORKSPACE = __ENV.BENCH_WORKSPACE || 'k6-cold';
 const MAX_ASSETS = 40;
 
@@ -47,25 +49,7 @@ const verifyTime = new Trend('verify_time', true);
 const assetTime = new Trend('asset_time', true);
 const assetsFetched = new Counter('assets_fetched');
 
-export const options = {
-  scenarios: {
-    coldload: {
-      executor: 'ramping-arrival-rate',
-      startRate: RATES[0],
-      timeUnit: '1s',
-      preAllocatedVUs: 50,
-      maxVUs: 400,
-      stages: RATES.map((rate) => ({ target: rate, duration: `${STAGE}s` })),
-    },
-  },
-  // Guards the credential and the route, not the speed. A run of redirects to /login
-  // would report a fast page load that measured nothing at all.
-  thresholds: {
-    checks: ['rate>0.99'],
-  },
-  setupTimeout: '10m',
-  summaryTrendStats: SUMMARY_TREND_STATS,
-};
+export const options = arrivalOptions('coldload', RATES, STAGE);
 
 // visdom links its optional user stylesheet as /vis/static/../user/style.css. A browser
 // resolves that before it ever hits the wire; sending the dots verbatim earns a 403

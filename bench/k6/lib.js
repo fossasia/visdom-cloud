@@ -16,6 +16,43 @@ export const PASSWORD = 'benchmark-password';
 // undefined rather than an error.
 export const SUMMARY_TREND_STATS = ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'];
 
+export function intEnv(name, fallback) {
+  return parseInt(__ENV[name] || String(fallback), 10);
+}
+
+export function ratesEnv(fallback) {
+  return (__ENV.BENCH_RATES || fallback).split(',').map(Number);
+}
+
+// An open model on purpose: arrival rate is held regardless of how slow the server gets,
+// so saturation shows up as rising latency and dropped iterations rather than as VUs
+// politely waiting. A closed model would hide the knee.
+//
+// The threshold guards correctness, not speed. A run of 401s or redirects would report a
+// throughput that measures nothing and must fail; requests timing out because the server
+// is saturated are the result we came for and must not. Each scenario decides what
+// correct means by what it checks.
+//
+// Seeding runs bcrypt against a server that may still be busy, so the default 60s setup
+// timeout is not enough headroom to tell slow from broken.
+export function arrivalOptions(name, rates, stage) {
+  return {
+    scenarios: {
+      [name]: {
+        executor: 'ramping-arrival-rate',
+        startRate: rates[0],
+        timeUnit: '1s',
+        preAllocatedVUs: 50,
+        maxVUs: 400,
+        stages: rates.map((rate) => ({ target: rate, duration: `${stage}s` })),
+      },
+    },
+    thresholds: { checks: ['rate>0.99'] },
+    setupTimeout: '10m',
+    summaryTrendStats: SUMMARY_TREND_STATS,
+  };
+}
+
 // Not a .local address: the gateway validates with email_validator, which rejects
 // special-use and reserved names.
 export function email(prefix, i) {
