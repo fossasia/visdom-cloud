@@ -45,6 +45,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE}
       FRONTEND_URL: ${FRONTEND_URL}
       PORT: ${GATEWAY_PORT}
+      GATEWAY_WORKERS: ${GATEWAY_WORKERS:-1}
     depends_on:
       db:
         condition: service_healthy
