@@ -8,6 +8,7 @@ import uuid
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -17,6 +18,7 @@ from app.dependencies import (
     get_current_user,
     get_db,
     resolve_active_api_key,
+    user_for_access_token,
 )
 from app.models import APIKey, Membership, User, WorkspaceInvite
 from app.schemas import (
@@ -28,10 +30,12 @@ from app.schemas import (
     UserResponse,
 )
 from app.security import (
+    claims_match_user,
     create_access_token,
     create_refresh_token,
     decode_token,
     get_password_hash,
+    session_claims,
     verify_password,
 )
 from app.username import (
@@ -169,9 +173,9 @@ def login(
         )
 
     # generate token payloads
-    user_id_str = str(user.id)
-    access_token = create_access_token(data={"sub": user_id_str})
-    refresh_token = create_refresh_token(data={"sub": user_id_str})
+    claims = session_claims(user)
+    access_token = create_access_token(data=claims)
+    refresh_token = create_refresh_token(data=claims)
 
     # set refresh token cookie
     response.set_cookie(
@@ -229,9 +233,16 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
             detail="User associated with this token is inactive or does not exist."
         )
 
+    if not claims_match_user(payload, user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This session has been logged out.",
+        )
+
     # Rotate both access and refresh tokens
-    new_access_token = create_access_token(data={"sub": user_id_str})
-    new_refresh_token = create_refresh_token(data={"sub": user_id_str})
+    claims = session_claims(user)
+    new_access_token = create_access_token(data=claims)
+    new_refresh_token = create_refresh_token(data=claims)
 
     response.set_cookie(
         key="refresh_token",
@@ -248,8 +259,25 @@ def refresh_session(request: Request, response: Response, db: Session = Depends(
 
 
 @router.post("/logout")
-def logout(response: Response):
-    """Deletes the refresh token cookie, terminating the session."""
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Clears the session cookies and revokes refresh tokens already issued."""
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token)
+            user_id = uuid.UUID(payload.get("sub"))
+        except (jwt.PyJWTError, TypeError, ValueError):
+            user_id = None
+
+        if user_id is not None:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is not None:
+                user.token_version = (user.token_version or 0) + 1
+                try:
+                    db.commit()
+                except SQLAlchemyError:
+                    db.rollback()
+
     response.delete_cookie(key="refresh_token", path="/api/v1/auth")
     response.delete_cookie(key="session_token", path="/")
     return {"detail": "Successfully logged out"}
@@ -261,16 +289,14 @@ def verify_session(request: Request, db: Session = Depends(get_db)):
     caller presents either a valid `session_token` cookie (browser read path) or
     a valid `X-API-KEY` (programmatic write path), and 401 otherwise. This is a
     coarse "is this a legitimate caller?" gate; the precise workspace + role check
-    is done separately by the visdom resolve endpoints. The cookie path is
-    stateless; only the API-key path touches the DB."""
-    token = request.cookies.get("session_token")
-    if token:
-        try:
-            payload = decode_token(token)
-            if payload.get("sub") is not None and payload.get("type") == "access":
-                return {"status": "ok", "auth": "session"}
-        except jwt.PyJWTError:
-            pass
+    is done separately by the visdom resolve endpoints.
+
+    Both paths resolve against the database so that logging out, or revoking a
+    key, actually closes the gate. Note that nginx caches this response per
+    credential, so a revoked session keeps passing until that entry expires."""
+    user = user_for_access_token(db, request.cookies.get("session_token"))
+    if user is not None and user.is_active:
+        return {"status": "ok", "auth": "session"}
 
     if resolve_active_api_key(db, request.headers.get("X-API-KEY")) is not None:
         return {"status": "ok", "auth": "api_key"}

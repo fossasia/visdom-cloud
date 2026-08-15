@@ -175,3 +175,65 @@ def test_api_key_lifecycle(client):
         headers={"X-API-KEY": raw_key}
     )
     assert check_revoked_response.status_code == 401
+
+
+VERIFY = "/api/v1/auth/verify"
+
+
+def test_verify_accepts_a_live_session(client, make_user):
+    """The nginx auth gate lets a logged-in browser through."""
+    make_user(email="gate-live@example.com")
+
+    response = client.get(VERIFY)
+
+    assert response.status_code == 200
+    assert response.json()["auth"] == "session"
+
+
+def test_verify_rejects_a_session_cookie_after_logout(client, make_user):
+    """Logging out revokes the cookie for the gate, not just for the browser.
+
+    The token is replayed by hand because logout also clears it client-side;
+    without that the request would carry no cookie at all and would be refused
+    for the wrong reason. This is the stolen-cookie case.
+    """
+    make_user(email="gate-logout@example.com")
+    stolen = client.cookies.get("session_token")
+    assert stolen
+
+    assert client.get(VERIFY).status_code == 200
+
+    assert client.post("/api/v1/auth/logout").status_code == 200
+
+    replayed = client.get(VERIFY, headers={"Cookie": f"session_token={stolen}"})
+    assert replayed.status_code == 401
+
+
+def test_verify_rejects_a_deactivated_user(client, make_user, db_session):
+    """Deactivating an account closes the gate for sessions it already had."""
+    from app.models import User
+
+    user = make_user(email="gate-inactive@example.com")
+    assert client.get(VERIFY).status_code == 200
+
+    record = db_session.query(User).filter(User.email == user["email"]).first()
+    record.is_active = False
+    db_session.commit()
+
+    assert client.get(VERIFY).status_code == 401
+
+
+def test_verify_still_accepts_an_api_key(client, make_user):
+    """The programmatic path is unchanged by the session-revocation check."""
+    user = make_user(email="gate-key@example.com")
+    created = client.post(
+        "/api/v1/keys", json={"name": "gate-key"}, headers=user["headers"]
+    )
+    assert created.status_code == 201, created.text
+    raw_key = created.json()["raw_key"]
+
+    client.cookies.clear()
+    response = client.get(VERIFY, headers={"X-API-KEY": raw_key})
+
+    assert response.status_code == 200
+    assert response.json()["auth"] == "api_key"
