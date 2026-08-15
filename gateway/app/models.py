@@ -16,7 +16,7 @@ import uuid
 def utcnow() -> datetime.datetime:
     """Timezone-aware replacement for the deprecated datetime.utcnow()."""
     return datetime.datetime.now(datetime.timezone.utc)
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,6 +34,7 @@ class User(Base):
     tier = Column(String, default="free")  # free, pro, enterprise
     is_staff = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     # Relationships
