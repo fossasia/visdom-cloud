@@ -54,8 +54,8 @@ upstream console_gateway {
 }
 
 # One visdom process saturates one core at roughly 575 line writes/s while the rest
-# of the box sits idle, so capacity comes from more instances rather than a bigger
-# box. `consistent` means adding or removing an instance migrates only ~1/N of
+# of the box sits idle (measured, see bench/README.md), so capacity comes from more
+# instances rather than a bigger box. `consistent` means adding or removing an instance migrates only ~1/N of
 # workspaces instead of reshuffling all of them.
 #
 # Requests with no workspace at all (SPA assets, /vis/ without a header) hash on
@@ -118,7 +118,7 @@ server {
         #
         # This window is also how long a logged-out session or a revoked key keeps
         # working, so it is kept as short as the gateway can afford. A verify costs
-        # 2.4 ms measured against a page load of 21 ms,
+        # 2.4 ms measured (bench/README.md, scenario 3) against a page load of 21 ms,
         # so paying it six times more often than the previous 30 s does not register.
         proxy_cache auth_cache;
         proxy_cache_key "$cookie_session_token|$http_x_api_key";
@@ -169,8 +169,8 @@ server {
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
 
-        # Which instance served this, so a workspace pinning to one shard can be
-        # verified from outside. add_header at this level replaces the ones inherited
+        # Which instance served this, so bench/shardcheck.py can prove a workspace
+        # pins to one shard. add_header at this level replaces the ones inherited
         # from server{}, so the security headers have to be re-included here.
         add_header X-Visdom-Upstream $upstream_addr always;
         include /etc/nginx/security-headers.conf;
