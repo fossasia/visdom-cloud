@@ -6,27 +6,65 @@
 #
 # This block is included inside the base image's http{}.
 
+proxy_cache_path /var/cache/nginx/auth levels=1:2 keys_zone=auth_cache:1m
+                 max_size=10m inactive=60s use_temp_path=off;
+
+gzip on;
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_types
+    application/javascript
+    application/json
+    application/wasm
+    application/xml
+    image/svg+xml
+    text/css
+    text/javascript
+    text/plain;
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
+}
+
+# Shard key: the workspace a request belongs to. visdom keeps live state (envs +
+# socket subscribers) in memory per workspace, so every request touching a
+# workspace — writes, reads, and the websocket — must reach the same instance.
+# Sticky-by-session is NOT enough: one workspace has many sessions.
+#
+# Read off $request_uri rather than the $ws_slug capture below, so the key does
+# not depend on which location matched or on when captures are set relative to
+# upstream selection.
+map $request_uri $shard_key_path {
+    default                       "";
+    "~^/vis/w/(?<uri_slug>[^/]+)/" $uri_slug;
+}
+
+# Browser traffic carries the slug in the path; the python client sends it as a
+# header instead. Either way the same workspace yields the same key.
+map $shard_key_path $shard_key {
+    default $shard_key_path;
+    ""      $http_x_visdom_workspace;
 }
 
 upstream console_gateway {
     server ${GATEWAY_HOST}:${GATEWAY_PORT};
 }
 
-# Single visdom instance today. To scale out as users grow, add more `server`
-# lines here AND route each workspace consistently to one instance — visdom keeps
-# live state (envs + socket subscribers) in memory, so a workspace's writes and
-# reads must land on the same instance. Sticky-by-session is NOT enough; shard by
-# workspace, e.g.:
-#     hash $visdom_workspace consistent;
-#     server visdom-1:8097;
-#     server visdom-2:8097;
-# where $visdom_workspace is derived from the /vis/w/<slug>/ path (reads) or the
-# X-Visdom-Workspace header (writes) via a `map`.
+# One visdom process saturates one core at roughly 575 line writes/s while the rest
+# of the box sits idle, so capacity comes from more instances rather than a bigger
+# box. `consistent` means adding or removing an instance migrates only ~1/N of
+# workspaces instead of reshuffling all of them.
+#
+# Requests with no workspace at all (SPA assets, /vis/ without a header) hash on
+# the empty key, which is deterministic — they all land on one instance. Harmless,
+# since those responses are identical everywhere, but it does make that instance
+# look busier than its peers.
 upstream visdom_server {
-    server ${VISDOM_HOST}:${VISDOM_PORT};
+    hash $shard_key consistent;
+    ${VISDOM_SERVERS}
 }
 
 server {
@@ -37,10 +75,25 @@ server {
     # (this proxy listens on an internal port that differs from the public one).
     absolute_redirect off;
 
+    include /etc/nginx/security-headers.conf;
+
     # Built console SPA, served directly by nginx.
     location / {
         root /usr/share/nginx/html;
         try_files $uri $uri/ /index.html;
+    }
+
+    location /assets/ {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        include /etc/nginx/security-headers.conf;
+        access_log off;
+    }
+
+    location = /index.html {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "no-store" always;
+        include /etc/nginx/security-headers.conf;
     }
 
     location /api/v1/ {
@@ -60,6 +113,19 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Cookie $http_cookie;
         proxy_set_header X-API-KEY $http_x_api_key;
+
+        # Keyed on the credential alone; the gate reads nothing else.
+        #
+        # This window is also how long a logged-out session or a revoked key keeps
+        # working, so it is kept as short as the gateway can afford. A verify costs
+        # 2.4 ms measured against a page load of 21 ms,
+        # so paying it six times more often than the previous 30 s does not register.
+        proxy_cache auth_cache;
+        proxy_cache_key "$cookie_session_token|$http_x_api_key";
+        proxy_cache_valid 200 5s;
+        proxy_cache_valid 401 403 5s;
+        proxy_ignore_headers Set-Cookie Cache-Control Expires;
+        proxy_hide_header Set-Cookie;
     }
 
     # Browser read path: /vis/w/<slug>/... — inject the workspace from the URL.
@@ -79,6 +145,11 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
+
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-cache" always;
+        add_header X-Visdom-Upstream $upstream_addr always;
+        include /etc/nginx/security-headers.conf;
     }
 
     # Write path (python client, X-API-KEY + X-Visdom-Workspace headers) and any
@@ -97,9 +168,19 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
+
+        # Which instance served this, so a workspace pinning to one shard can be
+        # verified from outside. add_header at this level replaces the ones inherited
+        # from server{}, so the security headers have to be re-included here.
+        add_header X-Visdom-Upstream $upstream_addr always;
+        include /etc/nginx/security-headers.conf;
     }
 
     location @auth_redirect {
+        default_type application/json;
+        if ($http_x_api_key) {
+            return 401 '{"detail":"Invalid or expired API key"}';
+        }
         return 302 /login?next=$request_uri;
     }
 }
