@@ -15,8 +15,10 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.username import USERNAME_PATTERN as _USERNAME_RE
+
 # --- USER SCHEMAS ---
-USERNAME_PATTERN = r"^[a-z0-9_-]{3,30}$"
+USERNAME_PATTERN = _USERNAME_RE.pattern
 
 
 class UserBase(BaseModel):
