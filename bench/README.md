@@ -38,6 +38,7 @@ to 5 s and close the revocation gap six times faster.
 | `k6run.sh` | VM host | runs one k6 scenario with the sampler attached |
 | `k6/lib.js` | `k6` container | seeding, sessions, the settle wait and the executor options |
 | `k6/login.js` | `k6` container | scenario 1 — login storm |
+| `k6/browse.js` | `k6` container | scenario 2 — dashboard browse |
 | `k6/coldload.js` | `k6` container | scenario 3 — cold visdom page load |
 
 `cpu_sample.py` runs on the **host**, not in a container: a container has its own PID
@@ -100,6 +101,7 @@ they seed their own accounts:
 ```bash
 ./bench/k6run.sh login --smoke              # proves the plumbing, a few seconds
 ./bench/k6run.sh login                      # scenario 1
+./bench/k6run.sh browse                     # scenario 2
 ./bench/k6run.sh coldload                   # scenario 3
 BENCH_RATES=1,2,5,10,20 ./bench/k6run.sh coldload
 ```
@@ -265,6 +267,35 @@ bursty in a way that averages out: a thousand-person org all arriving over a ten
 window is under 2/s. If it ever binds, the fix is more gateway processes, which works here
 precisely because the gateway holds no per-request state.
 
+### 2 — dashboard browse (2026-08-15)
+
+What the console does when someone opens it and clicks around: `/auth/me`, the workspace
+list, then members, keys and shared links inside one workspace. Five authenticated calls,
+all reaching Postgres. Each is timed separately, because the useful answer is which call
+to fix rather than "the dashboard is slow".
+
+| Gateway workers | Browses | Throughput | seq p50 | seq p95 | Dropped | gateway_cores_max | host_cores_max |
+|---|---|---|---|---|---|---|---|
+| 1 | 2,446 | 13.1/s | 26.0 ms | 636 ms | **1,435** | 1.18 | 1.82 |
+| 4 | 4,272 | **27.5/s** | 29.0 ms | **283 ms** | **3** | **2.65** | 4.00 |
+
+**The gateway was running as a single uvicorn worker, so it hit exactly the same one-core
+wall as visdom.** Nothing else was saturated when it did: at one worker the host was at
+1.82 of 4 cores while a third of all browse attempts were dropped. That is the signature
+of a single process, not a busy machine.
+
+Four workers doubles throughput, cuts p95 by more than half, and takes dropped iterations
+from 1,435 to 3. The pool drawing 2.65 cores is the proof it is real parallelism, since one
+Python process cannot exceed 1.0.
+
+**Unlike visdom this needed no sharding**, which is the whole point of the distinction. The
+gateway keeps no per-request state, so any worker can answer any request and the kernel can
+hand the connection to whichever is free. visdom cannot do that, which is why it needs a
+consistent hash on the workspace and the gateway needs one line of config.
+
+At four workers the host is full at 3.99 of 4.00, so 27.5/s is this box's limit rather than
+the gateway's. No single endpoint stands out: all five sit between 29 and 54 ms at p95.
+
 ### 3 — cold visdom page load (2026-08-12)
 
 A first-time visit with an empty browser cache: the auth check, the page, then all 19
@@ -311,8 +342,8 @@ Three things this is not:
 - **One training run per user.** Someone running ten jobs counts as ten.
 - **Valid with the generator on the same box.** These figures assume load comes from
   elsewhere; here it was competing for the same four cores.
-- **The whole platform.** Logins cap at ~12/s and cold page loads at ~20/s, both measured
-  separately above. Scenario 2, dashboard browsing, is still unmeasured.
+- **The whole platform.** Logins cap at ~12/s, dashboard browsing at ~27/s on four gateway
+  workers, and cold page loads at ~20/s, all measured separately above.
 
 ### What this means for scaling
 
@@ -333,8 +364,6 @@ state that would have to be split is the same.
   not the steady-state cost those runs measured.
 - Specific to 4 OCPU ARM and to code that still has a synchronous gateway call on the
   event loop.
-- Scenario 2 (dashboard browse) is not measured; anything said about it is reasoning, not
-  data.
 - The k6 scenarios seed accounts that survive between runs, so a rerun re-registers them
   and takes an expected 400 for each. The `errors` column counts workload failures only,
   which is why it reads 0 on a clean run rather than one per seeded user.
@@ -347,6 +376,10 @@ The gateway is also the only component that does not shard, so this asks whether
 front door binds before visdom does. An open load model is the point — arrival rate is
 held whatever the server does, so the knee is visible instead of hidden behind clients
 that slow down in sympathy.
+
+**2** — the console's own read path, which is the gateway rather than visdom, and the one
+component that does not shard. Five authenticated calls per iteration, each timed on its
+own so the slow one is identifiable rather than averaged away.
 
 **3** — a first visit with a cold browser cache, which is when the auth gate is felt: every
 request under `/vis/` passes it. Each iteration also pays one uncached `/auth/verify`
@@ -536,4 +569,5 @@ to look clean.
 
 ## Not here yet
 
-Scenario 2 (dashboard browse) is the remaining k6 scenario.
+All five scenarios are measured. The gap now is running the load generator from a separate
+machine, so the saturation figures stop being pessimistic.
