@@ -1,38 +1,29 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { useMemo, useState } from 'react';
 import { Building2, Check, Plus, Search, Star, X } from 'lucide-react';
-import { api } from '../../context/AuthContext';
+import { api, useAuth } from '../../context/AuthContext';
+import { readScoped, writeScoped } from '../../utils/storage';
+import { invalidate } from '../../utils/requestCache';
 import ModalPortal from '../ModalPortal';
 import CreateWorkspaceModal from './CreateWorkspaceModal';
 
-const RECENT_KEY = 'visdom-recent-workspaces';
+const RECENT_KEY = 'recent-workspaces';
 const MAX_RECENT = 8;
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
-const getRecentIds = () => {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    if (!raw) return [];
-    const items = JSON.parse(raw);
-    const now = Date.now();
-    const validItems = items.filter((item) => now - item.timestamp <= THREE_HOURS_MS);
-    return validItems.map((item) => item.id);
-  } catch {
-    return [];
-  }
+const getRecentIds = (userId) => {
+  const items = readScoped(RECENT_KEY, userId, []);
+  if (!Array.isArray(items)) return [];
+  const now = Date.now();
+  return items.filter((item) => now - item.timestamp <= THREE_HOURS_MS).map((item) => item.id);
 };
 
-const pushRecentId = (id) => {
-  try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    const items = raw ? JSON.parse(raw) : [];
-    const now = Date.now();
-    const filtered = items.filter((item) => item.id !== id && now - item.timestamp <= THREE_HOURS_MS);
-    const updated = [{ id, timestamp: now }, ...filtered].slice(0, MAX_RECENT);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
-  } catch {
-    // ignore
-  }
+const pushRecentId = (userId, id) => {
+  const items = readScoped(RECENT_KEY, userId, []);
+  const list = Array.isArray(items) ? items : [];
+  const now = Date.now();
+  const filtered = list.filter((item) => item.id !== id && now - item.timestamp <= THREE_HOURS_MS);
+  writeScoped(RECENT_KEY, userId, [{ id, timestamp: now }, ...filtered].slice(0, MAX_RECENT));
 };
 
 const SECTIONS = [
@@ -45,7 +36,8 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
   const [query, setQuery] = useState('');
   const [section, setSection] = useState('recent');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [recentIds] = useState(getRecentIds);
+  const { user } = useAuth();
+  const [recentIds] = useState(() => getRecentIds(user?.id));
 
   const sectioned = useMemo(() => {
     if (section === 'starred') return workspaces.filter((ws) => ws.starred);
@@ -65,7 +57,7 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
   }, [sectioned, query]);
 
   const handleSwitch = (workspace) => {
-    pushRecentId(workspace.id);
+    pushRecentId(user?.id, workspace.id);
     onSwitch(workspace);
     onClose();
   };
@@ -74,6 +66,7 @@ const SelectWorkspaceModal = ({ workspaces, activeWorkspace, onClose, onSwitch, 
     e.stopPropagation();
     try {
       const response = await api.patch(`/workspaces/${workspace.id}/star`, { starred: !workspace.starred });
+      invalidate('/workspaces');
       onWorkspaceUpdated(response.data);
     } catch (err) {
       console.error('Failed to update starred workspace', err);

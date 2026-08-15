@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, CreditCard, Rocket, Sparkles, Zap } from 'lucide-react';
 import { api, useAuth } from '../../context/AuthContext';
+import { cachedGet, invalidate } from '../../utils/requestCache';
 import { parseApiError } from '../../utils/helpers';
 
 const PLAN_ICONS = { free: Zap, pro: Sparkles, enterprise: Rocket };
@@ -21,12 +22,12 @@ const BillingTab = () => {
     setLoading(true);
     setError('');
     try {
-      const [plansRes, subRes] = await Promise.all([
-        api.get('/billing/plans'),
-        api.get('/billing/subscription'),
+      const [plansData, subData] = await Promise.all([
+        cachedGet('/billing/plans', () => api.get('/billing/plans').then((res) => res.data)),
+        cachedGet('/billing/subscription', () => api.get('/billing/subscription').then((res) => res.data)),
       ]);
-      setPlans(plansRes.data);
-      setSubscription(subRes.data);
+      setPlans(plansData);
+      setSubscription(subData);
     } catch (err) {
       setError(parseApiError(err, 'Failed to load billing information.'));
     } finally {
@@ -46,6 +47,7 @@ const BillingTab = () => {
     setError('');
     try {
       const response = await api.post('/billing/subscription', { tier });
+      invalidate('/billing/subscription');
       setSubscription(response.data);
       if (user) setUser({ ...user, tier: response.data.tier });
     } catch (err) {

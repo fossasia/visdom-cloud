@@ -59,7 +59,7 @@ body {
   font-weight: 700;
   font-size: 16px;
   letter-spacing: -0.5px;
-  color: #333333;
+  color: #2f6ef0;
   text-decoration: none;
 }
 
@@ -228,6 +228,7 @@ body {
   height: 100vh;
   padding: 18px 14px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .gc-logo {
@@ -245,6 +246,23 @@ body {
   gap: 2px;
   flex: 1;
   margin-top: 22px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.gc-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .gc-sidebar-footer {
@@ -254,6 +272,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .gc-sidebar-user {
@@ -444,7 +463,6 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.gc-tab-ext { margin-left: auto; opacity: 0.55; }
 
 /* Buttons */
 .gc-btn {
@@ -771,4 +789,34 @@ body {
 
 .key-item:last-child {
   margin-bottom: 0;
+}
+
+.pw-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pw-field-input {
+  padding-right: 32px;
+}
+
+.pw-field-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+.pw-field-toggle:hover {
+  color: var(--text-primary);
 }
