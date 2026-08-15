@@ -79,6 +79,42 @@ services:
       - visdom-2
       - visdom-3
 
+  # Load generator for bench/. Profile-gated, so a plain `docker compose up` never
+  # starts it; see bench/README.md.
+  bench:
+    profiles: ["bench"]
+    build:
+      context: ./bench
+    environment:
+      BENCH_SERVER: http://proxy
+      BENCH_PORT: ${NGINX_PORT}
+      BENCH_BASE_URL: ${VISDOM_BASE_URL}
+      VISDOM_API_KEY: ${VISDOM_API_KEY:-}
+      BENCH_EMAIL: ${BENCH_EMAIL:-}
+      BENCH_PASSWORD: ${BENCH_PASSWORD:-}
+    depends_on:
+      - proxy
+
+  # HTTP scenarios for the gateway paths visdom never touches. Same profile gate as
+  # bench, and on the same network so it reaches the proxy by service name.
+  k6:
+    profiles: ["bench"]
+    image: grafana/k6:latest
+    entrypoint: ["k6"]
+    working_dir: /scripts
+    volumes:
+      - ./bench/k6:/scripts:ro
+    # Passed through empty rather than defaulted, so each scenario's own defaults
+    # apply unless the caller overrides them.
+    environment:
+      BENCH_BASE: http://proxy:${NGINX_PORT}
+      BENCH_USERS: ${BENCH_USERS:-}
+      BENCH_RATES: ${BENCH_RATES:-}
+      BENCH_STAGE: ${BENCH_STAGE:-}
+      BENCH_WORKSPACE: ${BENCH_WORKSPACE:-}
+    depends_on:
+      - proxy
+
 volumes:
   db_data:
   visdom_data:

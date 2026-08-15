@@ -23,3 +23,8 @@ frontend/.eslintcache
 # 4. OS Files
 .DS_Store
 Thumbs.db
+
+# 5. Benchmark output — tooling is tracked, capacity numbers stay local
+bench/results/
+bench/.env*
+bench/__pycache__/
