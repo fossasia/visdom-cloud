@@ -165,6 +165,46 @@ def test_join_expired_link(client, make_user, make_workspace):
     assert ok.status_code == 200
 
 
+def test_join_link_addressed_to_someone_else(client, make_user, make_workspace):
+    owner = make_user()
+    invited = make_user(email="invited@example.com")
+    stranger = make_user(email="stranger@example.com")
+    workspace = make_workspace(owner)
+
+    link = client.post(
+        f"{WORKSPACES}/{workspace['id']}/share",
+        json={"invite_email": "Invited@Example.com"},
+        headers=owner["headers"],
+    ).json()
+
+    refused = client.post(
+        f"{WORKSPACES}/share/{link['id']}/join", json={}, headers=stranger["headers"]
+    )
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "This invite was issued to a different email address."
+
+    # The address it was issued to still gets in, matched without regard to case.
+    accepted = client.post(
+        f"{WORKSPACES}/share/{link['id']}/join", json={}, headers=invited["headers"]
+    )
+    assert accepted.status_code == 200
+
+
+def test_join_unaddressed_link_is_open_to_anyone(client, make_user, make_workspace):
+    owner = make_user()
+    anyone = make_user()
+    workspace = make_workspace(owner)
+
+    link = client.post(
+        f"{WORKSPACES}/{workspace['id']}/share", json={}, headers=owner["headers"]
+    ).json()
+
+    joined = client.post(
+        f"{WORKSPACES}/share/{link['id']}/join", json={}, headers=anyone["headers"]
+    )
+    assert joined.status_code == 200
+
+
 def test_join_unknown_link(client, make_user):
     joiner = make_user()
     response = client.post(
