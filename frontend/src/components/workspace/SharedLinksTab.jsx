@@ -4,7 +4,11 @@ import { Check, Copy, Link2, Lock, Trash2 } from 'lucide-react';
 import { api } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { useToast } from '../toast/useToast';
+import { copyToClipboard } from '../../utils/clipboard';
+import { cachedGet, invalidate } from '../../utils/requestCache';
 import { EXPIRY_PRESETS, ROLE_BADGE, parseApiError, resolveExpiresAt } from '../../utils/helpers';
+
+const shareUrl = (linkId) => `${window.location.origin}/share/${linkId}`;
 
 const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   const confirm = useConfirm();
@@ -21,11 +25,12 @@ const SharedLinksTab = ({ workspaceId, isAdmin }) => {
   const [copiedId, setCopiedId] = useState(null);
 
   const fetchLinks = useCallback(async () => {
+    const key = `/workspaces/${workspaceId}/share`;
     setLoading(true);
     try {
-      const response = await api.get(`/workspaces/${workspaceId}/share`);
-      setLinks(response.data);
-    } catch (err) {  
+      const data = await cachedGet(key, () => api.get(key).then((res) => res.data));
+      setLinks(data);
+    } catch (err) {
       console.error('Error fetching shared links', err);
     } finally {
       setLoading(false);
@@ -48,6 +53,7 @@ fetchLinks();
         password: password.trim() || null,
         invite_email: inviteEmail.trim() || null,
       });
+      invalidate(`/workspaces/${workspaceId}/share`);
       setLinks((prev) => [...prev, response.data]);
       setRole('member');
       setExpiryPreset('none');
@@ -72,6 +78,7 @@ fetchLinks();
     if (!ok) return;
     try {
       await api.delete(`/workspaces/share/${linkId}`);
+      invalidate(`/workspaces/${workspaceId}/share`);
       setLinks((prev) => prev.filter((l) => l.id !== linkId));
       toast.success('Share link revoked.');
     } catch (err) { // eslint-disable-line no-unused-vars
@@ -79,11 +86,15 @@ fetchLinks();
     }
   };
 
-  const handleCopy = (link) => {
-    const url = `${window.location.origin}/share/${link.id}`;
-    navigator.clipboard.writeText(url);
-    setCopiedId(link.id);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleCopy = async (link) => {
+    const ok = await copyToClipboard(shareUrl(link.id));
+    if (ok) {
+      setCopiedId(link.id);
+      setTimeout(() => setCopiedId(null), 2000);
+      toast.success('Share link copied to clipboard.');
+    } else {
+      toast.error('Could not copy automatically — copy the link manually.');
+    }
   };
 
   return (
@@ -179,7 +190,7 @@ fetchLinks();
             <div key={link.id} className="gc-row">
               <div className="gc-min-w-0">
                 <div className="gc-row-main gc-font-mono-small">
-                  /share/{link.id}
+                  {shareUrl(link.id)}
                 </div>
                 <div className="gc-row-meta">
                   <span className={`gc-badge ${ROLE_BADGE[link.role] || 'gc-badge-member'}`}>Joins as {link.role}</span>

@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { useAuth, api } from '../context/AuthContext';
+import PasswordInput from '../components/PasswordInput';
+import { resolvePostAuthTarget, redirectAfterAuth } from '../utils/helpers';
 
-const USERNAME_PATTERN = /^[a-z0-9_-]{3,30}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,30}$/;
 
 const Register = () => {
   const [email, setEmail] = useState('');
@@ -24,7 +26,7 @@ const Register = () => {
   const { register, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from || '/';
+  const from = resolvePostAuthTarget(location);
 
   const fetchSuggestion = async (seed) => {
     setAutoUsernameLoading(true);
@@ -101,7 +103,7 @@ fetchSuggestion();
       await register(email, password, finalUsername);
       setSuccess('Account created! Logging you in...');
       await login(email, password);
-      navigate(from, { replace: true });
+      redirectAfterAuth(from, navigate);
     } catch (err) {  
       const detail = err.response?.data?.detail;
       let errorMsg = 'Registration failed. Please try again.';
@@ -241,7 +243,7 @@ fetchSuggestion();
                   className="visdom-input"
                   placeholder="your_username"
                   value={customUsername}
-                  onChange={(e) => setCustomUsername(e.target.value.toLowerCase())}
+                  onChange={(e) => setCustomUsername(e.target.value.trimStart())}
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -249,7 +251,7 @@ fetchSuggestion();
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', fontSize: '12px' }}>
                     {!USERNAME_PATTERN.test(customUsername) ? (
                       <span style={{ color: 'var(--danger-bg)' }}>
-                        3-30 characters: lowercase letters, numbers, underscores, hyphens.
+                        3-30 characters: letters, numbers, underscores, hyphens.
                       </span>
                     ) : checkingUsername ? (
                       <span style={{ color: 'var(--text-muted)' }}>Checking availability...</span>
@@ -272,10 +274,9 @@ fetchSuggestion();
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="visdom-input"
+              autoComplete="new-password"
               placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -286,10 +287,9 @@ fetchSuggestion();
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Confirm Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="visdom-input"
+              autoComplete="new-password"
               placeholder="Re-enter password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -310,7 +310,7 @@ fetchSuggestion();
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
           Already have an account?{' '}
-          <Link to="/login" state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
+          <Link to={`/login${location.search}`} state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
             Sign in
           </Link>
         </div>

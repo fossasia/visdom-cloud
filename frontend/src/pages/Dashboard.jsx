@@ -1,7 +1,7 @@
 /* Copyright 2017-present, The Visdom Authors */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth, api } from '../context/AuthContext';
-import { Building2, CreditCard, ExternalLink, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
+import { Building2, CreditCard, Key, LineChart, Link2, LogOut, User, Users } from 'lucide-react';
 import WorkspaceSwitcher from '../components/workspace/WorkspaceSwitcher';
 import WorkspaceSettingsTab from '../components/workspace/WorkspaceSettingsTab';
 import MembersTab from '../components/workspace/MembersTab';
@@ -10,6 +10,8 @@ import KeysTab from '../components/workspace/KeysTab';
 import BillingTab from '../components/workspace/BillingTab';
 import PendingInvitesBanner from '../components/workspace/PendingInvitesBanner';
 import ProfileModal from '../components/ProfileModal';
+import { readScoped, writeScoped } from '../utils/storage';
+import { cachedGet, invalidate } from '../utils/requestCache';
 
 const TABS = [
   { id: 'workspaces', label: 'Workspaces', icon: Building2 },
@@ -21,7 +23,8 @@ const TABS = [
 
 const WORKSPACE_SCOPED_TABS = new Set(['workspaces', 'members', 'shared']);
 const TAB_IDS = new Set(TABS.map((tab) => tab.id));
-const ACTIVE_TAB_STORAGE_KEY = 'visdom-dashboard-active-tab';
+const ACTIVE_TAB_STORAGE_KEY = 'dashboard-active-tab';
+const DEFAULT_TAB = 'workspaces';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -31,26 +34,26 @@ const Dashboard = () => {
   const [pendingInvites, setPendingInvites] = useState([]);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
-    const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
-    return stored && TAB_IDS.has(stored) ? stored : 'workspaces';
+    const stored = readScoped(ACTIVE_TAB_STORAGE_KEY, user?.id);
+    return stored && TAB_IDS.has(stored) ? stored : DEFAULT_TAB;
   });
 
   const isAdmin = activeWorkspace?.role === 'admin';
 
   useEffect(() => {
-    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
-  }, [activeTab]);
+    writeScoped(ACTIVE_TAB_STORAGE_KEY, user?.id, activeTab);
+  }, [activeTab, user?.id]);
 
-  const fetchWorkspaces = useCallback(async () => {
+  const fetchWorkspaces = useCallback(async (force = false) => {
     setWorkspacesLoading(true);
     try {
-      const response = await api.get('/workspaces');
-      setWorkspaces(response.data);
+      const data = await cachedGet('/workspaces', () => api.get('/workspaces').then((res) => res.data), { force });
+      setWorkspaces(data);
       setActiveWorkspace((prev) => {
         if (prev) {
-          return response.data.find((ws) => ws.id === prev.id) || null;
+          return data.find((ws) => ws.id === prev.id) || null;
         }
-        return response.data[0] || null;
+        return data[0] || null;
       });
     } catch (err) {
       console.error(err);
@@ -60,9 +63,10 @@ const Dashboard = () => {
   }, []);
 
   const fetchPendingInvites = useCallback(async () => {
+    const key = '/workspaces/invites/pending';
     try {
-      const response = await api.get('/workspaces/invites/pending');
-      setPendingInvites(response.data);
+      const data = await cachedGet(key, () => api.get(key).then((res) => res.data));
+      setPendingInvites(data);
     } catch (err) {
       console.error(err);
     }
@@ -76,21 +80,24 @@ fetchWorkspaces();
 
   const handleInviteAccepted = (workspaceId) => {
     setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
-         
-fetchWorkspaces();
+    invalidate('/workspaces');
+    fetchWorkspaces(true);
   };
 
   const handleInviteDeclined = (workspaceId) => {
     setPendingInvites((prev) => prev.filter((inv) => inv.workspace.id !== workspaceId));
+    invalidate('/workspaces/invites/pending');
   };
 
   const handleWorkspaceCreated = (workspace) => {
+    invalidate('/workspaces');
     setWorkspaces((prev) => [...prev, workspace]);
     setActiveWorkspace(workspace);
-    setActiveTab('workspaces');
+    setActiveTab(DEFAULT_TAB);
   };
 
   const handleWorkspaceUpdated = (workspace) => {
+    invalidate('/workspaces');
     setWorkspaces((prev) =>
       prev.map((ws) => (ws.id === workspace.id ? workspace : ws))
     );
@@ -98,9 +105,10 @@ fetchWorkspaces();
   };
 
   const handleWorkspaceRemoved = (workspaceId) => {
+    invalidate('/workspaces');
     setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
     setActiveWorkspace((prev) => (prev?.id === workspaceId ? null : prev));
-    setActiveTab('workspaces');
+    setActiveTab(DEFAULT_TAB);
   };
 
   const needsWorkspace = WORKSPACE_SCOPED_TABS.has(activeTab) && !activeWorkspace;
@@ -142,21 +150,18 @@ fetchWorkspaces();
           <a
             className="gc-tab gc-tab-viz"
             href={activeWorkspace ? `/vis/w/${activeWorkspace.slug}/` : undefined}
-            target="_blank"
-            rel="noopener noreferrer"
             aria-disabled={!activeWorkspace}
             onClick={(e) => {
               if (!activeWorkspace) e.preventDefault();
             }}
             title={
               activeWorkspace
-                ? `Open ${activeWorkspace.name}'s visualizations in a new tab`
+                ? `Open ${activeWorkspace.name}'s visualizations`
                 : 'Select a workspace to open its visualizations'
             }
           >
             <LineChart size={15} />
             <span>Visualizations</span>
-            <ExternalLink size={12} className="gc-tab-ext" />
           </a>
         </nav>
 

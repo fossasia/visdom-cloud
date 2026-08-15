@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import PasswordInput from '../components/PasswordInput';
+import { resolvePostAuthTarget, redirectAfterAuth } from '../utils/helpers';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -12,7 +14,7 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from || '/';
+  const from = resolvePostAuthTarget(location);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,7 +23,7 @@ const Login = () => {
     
     try {
       await login(email, password);
-      navigate(from, { replace: true });
+      redirectAfterAuth(from, navigate);
     } catch (err) {
       const detail = err.response?.data?.detail;
       let errorMsg = 'Login failed. Please check your credentials.';
@@ -85,10 +87,9 @@ const Login = () => {
             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
               Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               required
-              className="visdom-input"
+              autoComplete="current-password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -109,7 +110,7 @@ const Login = () => {
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: 'var(--text-muted)' }}>
           Don't have an account?{' '}
-          <Link to="/register" state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
+          <Link to={`/register${location.search}`} state={{ from: location.state?.from }} style={{ color: '#3b5998', textDecoration: 'none', fontWeight: '600' }}>
             Sign up
           </Link>
         </div>
