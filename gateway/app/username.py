@@ -13,9 +13,12 @@ preserves the case the user typed; uniqueness is enforced case-insensitively, so
 
 import re
 import secrets
+from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from app.models import User
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{3,30}$")
 
@@ -46,10 +49,8 @@ def is_valid_username_format(username: str) -> bool:
     return bool(USERNAME_PATTERN.match(username))
 
 
-def find_user_by_username(db: Session, username: str):
+def find_user_by_username(db: Session, username: str) -> Optional[User]:
     """Looks a user up by username, ignoring case."""
-    from app.models import User
-
     return (
         db.query(User)
         .filter(func.lower(User.username) == canonical_username(username))
