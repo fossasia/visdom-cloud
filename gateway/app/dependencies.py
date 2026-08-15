@@ -17,6 +17,7 @@ from typing import Generator
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -98,6 +99,26 @@ def get_current_user(
     return user
 
 
+LAST_USED_THROTTLE = datetime.timedelta(seconds=60)
+
+
+def _touch_last_used(db: Session, key_record: APIKey) -> None:
+    """Stamps last_used_at, at most once per throttle window."""
+    now = utcnow()
+    previous = key_record.last_used_at
+    if previous is not None:
+        if previous.tzinfo is None:
+            previous = previous.replace(tzinfo=datetime.timezone.utc)
+        if now - previous < LAST_USED_THROTTLE:
+            return
+
+    key_record.last_used_at = now
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
 def resolve_active_api_key(db: Session, raw_key: str | None) -> APIKey | None:
     """Return the APIKey for a raw key if it exists, is active, unexpired, and its
     owner is active; otherwise None. Does not raise, so callers that only need a
@@ -120,6 +141,7 @@ def resolve_active_api_key(db: Session, raw_key: str | None) -> APIKey | None:
             return None
     if not key_record.owner or not key_record.owner.is_active:
         return None
+    _touch_last_used(db, key_record)
     return key_record
 
 
