@@ -1,4 +1,4 @@
-# bench/ — capacity measurement for visdom-cloud
+# bench/ — capacity measurement for visdom-dev
 
 Answers one question: **does visdom pin one core under concurrent writes, and where does
 throughput knee?**
@@ -53,7 +53,7 @@ round trip to Oracle.
 Once, to build the generator image:
 
 ```bash
-cd ~/app/visdom-cloud
+cd ~/app/visdom-dev
 git pull
 docker compose --profile bench build bench
 ```
@@ -61,7 +61,7 @@ docker compose --profile bench build bench
 Then, for every run:
 
 ```bash
-cd ~/app/visdom-cloud
+cd ~/app/visdom-dev
 read -rs VISDOM_API_KEY; export VISDOM_API_KEY
 export BENCH_WORKSPACE=loadtest
 
@@ -466,7 +466,7 @@ If teardown is ever missed — the VM reboots mid-run, say — clean up by hand.
 the manifest and finds everything by slug prefix:
 
 ```bash
-cd ~/app/visdom-cloud
+cd ~/app/visdom-dev
 docker compose --profile bench run --rm -T bench \
   python fleet.py teardown --prefix bench- --discover
 ```
