@@ -176,7 +176,7 @@ times, so only ~2% of requests pay it. Measured directly on raw HTTP, one write 
 brand-new workspace costs **17.19 ms against a warm 1.55 ms — 11×**. Two blocking costs,
 both on the event loop: the gateway resolve (~7.2 ms) and `WorkspaceEnvManager`'s
 first-touch disk I/O. Space creation is permanent, so only the resolve recurs after the
-45 s cache expires. **The impact of `CONCERNS.md` §1c is set by how many writes follow
+45 s cache expires. **The impact of the synchronous resolve is set by how many writes follow
 each resolve**, and a real workload that opens a client and trains for an hour looks like
 4a, not like the cold case.
 
@@ -360,7 +360,7 @@ caches are warm (nginx 5 s, `WorkspaceManager` 45 s), so the gateway is barely c
 That isolates plot serialization CPU, which is what "does visdom pin a core" asks.
 
 **4b** — every writer gets its own workspace and its own key, so each pays a cold gateway
-resolve: a synchronous `requests.post` on Tornado's event loop (`CONCERNS.md` §1c), plus a
+resolve: a synchronous `requests.post` on Tornado's event loop, plus a
 first-touch `WorkspaceEnvManager._create_space` that does blocking disk I/O. **4a
 throughput − 4b throughput at the same concurrency is the cost of the auth path**, and it
 is the number that says whether §1c is worth fixing before anything else.
@@ -490,10 +490,10 @@ The columns that answer the question are `visdom_cores_max`, `bench_cores_max` a
 means the server shed broadcasts and that level's latency figures understate the damage.**
 
 - **`visdom_cores_max` ≈ 1.00 at high concurrency** — serialization on one core is the
-  ceiling. `CONCERNS.md` §3a holds, sharding is the answer, a bigger VM buys nothing.
+  ceiling. Serialization is the bottleneck, sharding is the answer, a bigger VM buys nothing.
 - **`visdom_cores_max` plateaus well under 1.0 while `p95_ms` climbs** — something else
-  binds first, most likely the synchronous gateway call still on Tornado's event loop
-  (`CONCERNS.md` §1c). Fix that before adding instances.
+  binds first, most likely the synchronous gateway call still on Tornado's event loop.
+  Fix that before adding instances.
 - **`host_cores_max` approaching 4.0** — the *box* saturated, not visdom. The knee is an
   artefact of the generator competing with the server; rerun with fewer levels or accept
   the ceiling as a host limit, and say so in the report.
@@ -503,7 +503,7 @@ climbing. Below it you are adding parallelism; above it, only queue depth.
 
 ## Traps
 
-Carried from `BENCHMARKING.md` §3, because they have already cost one voided run:
+Each of these has already cost one voided run:
 
 1. **Any non-2xx voids the run.** `writebench.py` preflights for a 200 and aborts on the
    first failed write, so this should now be structurally impossible. A run of cached
@@ -536,5 +536,4 @@ to look clean.
 
 ## Not here yet
 
-Scenario 2 (dashboard browse) is the remaining k6 scenario. See the design doc for the
-phasing.
+Scenario 2 (dashboard browse) is the remaining k6 scenario.

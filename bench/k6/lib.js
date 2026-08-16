@@ -1,3 +1,5 @@
+/* Copyright 2017-present, The Visdom Authors */
+
 // Shared setup for the k6 gateway scenarios.
 //
 // Every scenario needs the same three things before it can measure anything:

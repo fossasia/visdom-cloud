@@ -1,3 +1,5 @@
+/* Copyright 2017-present, The Visdom Authors */
+
 // Scenario 1 - login storm.
 //
 // Every login runs bcrypt at cost factor 12 (gensalt() default), which is a few

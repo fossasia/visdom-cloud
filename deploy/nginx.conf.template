@@ -53,9 +53,9 @@ upstream console_gateway {
     server ${GATEWAY_HOST}:${GATEWAY_PORT};
 }
 
-# One visdom process saturates one core (~575 line writes/s, measured — see
-# bench/README.md), so capacity comes from more instances, not a bigger box.
-# `consistent` means adding or removing an instance migrates only ~1/N of
+# One visdom process saturates one core at roughly 575 line writes/s while the rest
+# of the box sits idle (measured, see bench/README.md), so capacity comes from more
+# instances rather than a bigger box. `consistent` means adding or removing an instance migrates only ~1/N of
 # workspaces instead of reshuffling all of them.
 #
 # Requests with no workspace at all (SPA assets, /vis/ without a header) hash on

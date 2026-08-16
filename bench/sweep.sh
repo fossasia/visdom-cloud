@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2017-present, The Visdom Authors
+# All rights reserved.
+#
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
 #
 # Drives a concurrency sweep on the VM host: for each level it starts cpu_sample.py,
 # runs the load generator in the bench container, stops the sampler, and appends one

@@ -1,3 +1,5 @@
+/* Copyright 2017-present, The Visdom Authors */
+
 // Scenario 3 - cold visdom page load.
 //
 // Every request under /vis/ passes the nginx auth gate, which calls the gateway's

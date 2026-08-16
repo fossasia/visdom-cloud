@@ -139,3 +139,35 @@ def test_expired_key_rejected(client, make_user):
 
     ok = client.get(KEY_CHECK, headers={"X-API-KEY": fresh["raw_key"]})
     assert ok.status_code == 200
+
+
+def test_key_use_is_recorded_then_throttled(client, make_user):
+    user = make_user()
+    created = client.post(KEYS, json={"name": "stamped"}, headers=user["headers"]).json()
+
+    def last_used():
+        listed = client.get(KEYS, headers=user["headers"]).json()
+        return next(key["last_used_at"] for key in listed if key["id"] == created["id"])
+
+    assert last_used() is None
+
+    assert client.get(KEY_CHECK, headers={"X-API-KEY": created["raw_key"]}).status_code == 200
+    first = last_used()
+    assert first is not None
+
+    # A second use inside the throttle window must not write again, otherwise every
+    # request on the read path costs a commit.
+    assert client.get(KEY_CHECK, headers={"X-API-KEY": created["raw_key"]}).status_code == 200
+    assert last_used() == first
+
+
+def test_a_rejected_key_is_not_stamped(client, make_user):
+    user = make_user()
+    expired = client.post(
+        KEYS, json={"name": "expired", "expires_at": "2020-01-01T00:00:00Z"}, headers=user["headers"]
+    ).json()
+
+    assert client.get(KEY_CHECK, headers={"X-API-KEY": expired["raw_key"]}).status_code == 401
+
+    listed = client.get(KEYS, headers=user["headers"]).json()
+    assert next(key["last_used_at"] for key in listed if key["id"] == expired["id"]) is None
