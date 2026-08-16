@@ -30,10 +30,10 @@ python -m visdom.server --port 8097 --base_url /vis
 cd frontend && npm run dev
 
 # 4. nginx (install first: `brew install nginx`)
-nginx -c "$(pwd)/nginx/visdom-cloud.conf"
+nginx -c "$(pwd)/nginx/visdom-dev.conf"
 ```
 
-Validate the config before starting: `nginx -t -c "$(pwd)/nginx/visdom-cloud.conf"`.
+Validate the config before starting: `nginx -t -c "$(pwd)/nginx/visdom-dev.conf"`.
 Reload after edits: `nginx -s reload`. Stop: `nginx -s stop`.
 
 Then open http://localhost:8080.

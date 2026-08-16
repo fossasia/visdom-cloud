@@ -1,13 +1,18 @@
-# Full visdom-cloud stack. Every credential, port, and URL is supplied from the
+# Full visdom-dev stack. Every credential, port, and URL is supplied from the
 # environment (copy .env.docker.example to .env and edit that one file) — nothing
 # is hardcoded here, so swapping config is a single-file change.
+
+# Pinned rather than inherited from the directory name, which is what compose does by
+# default. Volumes are named after the project, so a checkout in a differently named
+# directory would otherwise come up against empty volumes and look like data loss.
+name: visdom-dev
 
 # Shared by every visdom instance; they differ only in name. The explicit image
 # tag means the build runs once and the rest are cache hits.
 x-visdom: &visdom
   build:
     context: ${VISDOM_CONTEXT}
-  image: visdom-cloud-visdom:local
+  image: visdom-dev-visdom:local
   restart: unless-stopped
   environment:
     VISDOM_PORT: ${VISDOM_PORT}
@@ -45,6 +50,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE}
       FRONTEND_URL: ${FRONTEND_URL}
       PORT: ${GATEWAY_PORT}
+      GATEWAY_WORKERS: ${GATEWAY_WORKERS:-1}
     depends_on:
       db:
         condition: service_healthy
