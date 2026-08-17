@@ -12,15 +12,25 @@ in the browser. Everything is isolated per **workspace**.
 
 ## 2. Get an API key
 - In the console, open the **Keys** tab → **Create key**.
-- Copy it now — it is shown only once. (Org-scoped works for any of your
-  workspaces; workspace-scoped is bound to one.)
+- Copy it now — it is shown only once. (Org-scoped works for any of
+  your workspaces; workspace-scoped is bound to one.)
 
 ## 3. Install the client
-The hosted server needs the client that sends your key + workspace:
+The hosted server needs the client that sends your key + workspace. Install it into
+a fresh virtualenv so it cannot clash with anything already on your machine:
 ```bash
-pip install "git+https://github.com/vedansh-5/visdom.git@dev"
+python3 -m venv ~/.venvs/visdom-client
+source ~/.venvs/visdom-client/bin/activate
+python -m pip install "git+https://github.com/vedansh-5/visdom.git@dev"
 ```
 > Plain `pip install visdom` will **not** work here — it has no key/workspace support.
+
+> **Installed it before?** That branch is rebased periodically, so an earlier install
+> may be stale. Activate the virtualenv first, as above, then reinstall into it:
+> `python -m pip install --force-reinstall "git+https://github.com/vedansh-5/visdom.git@dev"`
+
+Activate the virtualenv in every new terminal before running your training script,
+otherwise `import visdom` finds whatever is installed system-wide instead.
 
 ## 4. Send some plots — this is how an "environment" is created
 An **environment** is created automatically the first time you write to it. There
