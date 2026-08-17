@@ -14,8 +14,6 @@ import { Counter } from 'k6/metrics';
 export const BASE = __ENV.BENCH_BASE || 'http://proxy';
 export const PASSWORD = 'benchmark-password';
 
-// p(99) is not in k6's default set, and asking for it after the fact yields
-// undefined rather than an error.
 export const SUMMARY_TREND_STATS = ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'];
 
 export function intEnv(name, fallback) {
@@ -26,17 +24,6 @@ export function ratesEnv(fallback) {
   return (__ENV.BENCH_RATES || fallback).split(',').map(Number);
 }
 
-// An open model on purpose: arrival rate is held regardless of how slow the server gets,
-// so saturation shows up as rising latency and dropped iterations rather than as VUs
-// politely waiting. A closed model would hide the knee.
-//
-// The threshold guards correctness, not speed. A run of 401s or redirects would report a
-// throughput that measures nothing and must fail; requests timing out because the server
-// is saturated are the result we came for and must not. Each scenario decides what
-// correct means by what it checks.
-//
-// Seeding runs bcrypt against a server that may still be busy, so the default 60s setup
-// timeout is not enough headroom to tell slow from broken.
 export function arrivalOptions(name, rates, stage) {
   return {
     scenarios: {
@@ -55,8 +42,6 @@ export function arrivalOptions(name, rates, stage) {
   };
 }
 
-// Not a .local address: the gateway validates with email_validator, which rejects
-// special-use and reserved names.
 export function email(prefix, i) {
   return `k6-${prefix}-${i}@example.com`;
 }
@@ -70,7 +55,6 @@ export function registerUsers(prefix, count) {
       JSON.stringify({ email: address, password: PASSWORD }),
       { headers: { 'Content-Type': 'application/json' } }
     );
-    // 400 means the account survived an earlier run, which is fine to reuse.
     if (res.status !== 201 && res.status !== 400) {
       throw new Error(`seeding ${address} failed: ${res.status} ${res.body}`);
     }
@@ -79,10 +63,6 @@ export function registerUsers(prefix, count) {
   return users;
 }
 
-// The auth gate reads the session_token cookie, which login sets to the same value
-// it returns in the body. Carrying it explicitly rather than through k6's cookie jar
-// keeps each seeded session distinct, and distinct sessions are distinct entries in
-// the nginx auth cache.
 export function openSessions(users) {
   return users.map((address) => {
     const res = http.post(`${BASE}/api/v1/auth/login`, {
@@ -110,17 +90,12 @@ export function ensureWorkspace(session, slug) {
     JSON.stringify({ name: slug, slug }),
     { headers: { 'Content-Type': 'application/json', ...bearerFor(session) } }
   );
-  // 400 is the slug already existing, which is the normal case on a repeat run.
   if (res.status !== 201 && res.status !== 400) {
     throw new Error(`creating workspace ${slug} failed: ${res.status} ${res.body}`);
   }
   return slug;
 }
 
-// A saturated gateway keeps answering slowly for minutes after the load stops, so a
-// run started too soon measures the previous run's queue instead of its own. Wait for
-// several quick health checks in a row, not just one, since the first request to
-// arrive after a backlog drains can be quick by luck.
 export function settle(timeoutSeconds = 180, quickMs = 500) {
   const deadline = Date.now() + timeoutSeconds * 1000;
   let quick = 0;
@@ -142,10 +117,6 @@ export function settle(timeoutSeconds = 180, quickMs = 500) {
   );
 }
 
-// Without this, a run that failed in setup dies in handleSummary on a missing metric
-// and the TypeError buries the error that actually mattered. Keyed on iterations
-// rather than requests, because setup issues requests of its own and those alone are
-// enough to make a run that never reached its workload look like it produced data.
 export function noRequests(data) {
   const iterations = data.metrics.iterations;
   return !data.metrics.http_reqs || !iterations || !iterations.values.count;
@@ -167,9 +138,6 @@ export function dropped(data) {
   return data.metrics.dropped_iterations ? data.metrics.dropped_iterations.values.count : 0;
 }
 
-// Counted here rather than read off http_req_failed, which also sees setup. Seeding
-// re-registers accounts that survived an earlier run and takes an expected 400 for
-// each, so http_req_failed reports one error per seeded user on every clean run.
 const failures = new Counter('workload_failures');
 
 export function recordFailure(res) {

@@ -1,18 +1,16 @@
-# Visdom Cloud — Tester Quickstart
+# Visdom Dev — Tester Quickstart
 
 A hosted, multi-tenant visdom for live experiment visualization. Your training
 code runs on **your** machine and streams plots to a shared server; you view them
 in the browser. Everything is isolated per **workspace**.
 
-> Replace `visdom-test.<your-domain>` below with the real deployment URL.
-
 ## 1. Make an account + workspace
-1. Open **https://visdom-test.<your-domain>** and **Register** (or log in).
+1. Open **https://visdom-cloud-test.duckdns.org** and **Register** (or log in).
 2. Create a **workspace** — note its **slug** (e.g. `team-alpha`).
 
 ## 2. Get an API key
-- In the console, open the **Keys** tab → **Create key**.
-- Copy it now — it is shown only once. (Org-scoped works for any of
+- In the console, open the **Keys & API** tab → **Generate**.
+- Copy or download it now — it is shown only once. (Org-scoped works for any of
   your workspaces; workspace-scoped is bound to one.)
 
 ## 3. Install the client
@@ -40,7 +38,7 @@ your own code.
 import visdom
 
 vis = visdom.Visdom(
-    server="https://visdom-test.<your-domain>", port=443, base_url="/vis",
+    server="https://visdom-cloud-test.duckdns.org", port=443, base_url="/vis",
     api_key="visdom_live_...",   # your key from step 2
     workspace="team-alpha",      # your workspace slug (required when a key is set)
 )
@@ -59,7 +57,8 @@ visdom UI at `/vis/w/team-alpha/`, and **experiment-1** appears in the environme
 list, updating live. You only ever see your own workspace's environments.
 
 ## Troubleshooting
-- **401 / "invalid key"** — key typo or it was revoked. Regenerate in the Keys tab.
+- **401 / "invalid key"** — key typo or it was revoked. Regenerate in the
+  **Keys & API** tab.
 - **"workspace is required"** — you set `api_key` but not `workspace`; add the slug.
 - **Nothing shows in the UI** — confirm you opened *your* workspace's link
   (`/vis/w/<your-slug>/`) and that the script printed no errors.

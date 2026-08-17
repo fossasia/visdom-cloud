@@ -87,15 +87,41 @@ def read_cmdline(pid):
         return []
 
 
+def read_ppid(pid):
+    try:
+        with open("/proc/%s/stat" % pid) as fh:
+            return int(fh.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
 def find_pids(markers):
-    """Every process whose argv contains any of ``markers``."""
-    pids = []
+    """Every process whose argv contains any of ``markers``, plus their descendants.
+
+    Workers frequently cannot be recognised from their own argv. uvicorn spawns its
+    through multiprocessing, so each worker reads as `python -c from
+    multiprocessing.spawn import spawn_main` with no mention of uvicorn at all.
+    Matching on argv alone would find the idle parent, miss every worker, and report
+    a saturated service as doing nothing.
+    """
+    matched = set()
+    children = {}
     for path in glob.glob("/proc/[0-9]*/cmdline"):
         pid = int(path.split("/")[2])
-        argv = read_cmdline(pid)
-        if any(marker in arg for arg in argv for marker in markers):
-            pids.append(pid)
-    return pids
+        if any(marker in arg for arg in read_cmdline(pid) for marker in markers):
+            matched.add(pid)
+        ppid = read_ppid(pid)
+        if ppid is not None:
+            children.setdefault(ppid, []).append(pid)
+
+    found = set(matched)
+    pending = list(matched)
+    while pending:
+        for child in children.get(pending.pop(), ()):
+            if child not in found:
+                found.add(child)
+                pending.append(child)
+    return sorted(found)
 
 
 def proc_ticks(pid):
