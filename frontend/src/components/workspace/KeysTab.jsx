@@ -114,7 +114,7 @@ fetchKeys();
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const contents = [
-      'Visdom Cloud API key',
+      'Visdom Dev API key',
       '',
       `Key:       ${newRawKey}`,
       `Generated: ${new Date().toISOString()}`,

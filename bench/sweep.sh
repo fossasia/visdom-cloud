@@ -87,8 +87,6 @@ if [[ "$SMOKE" -eq 1 ]]; then
   DRIVER_SCRIPT="viewbench.py"
   driver -e BENCH_SMOKE=1 >/dev/null
 
-  # Expected instance count comes from the same .env the proxy renders its upstream
-  # from, so the check fails if the pool and the config have drifted apart.
   SHARD_COUNT=0
   if [[ -f .env ]]; then
     SHARD_COUNT="$(set +o pipefail

@@ -31,8 +31,6 @@ import {
 } from './lib.js';
 
 const USERS = intEnv('BENCH_USERS', 20);
-// Measured ceiling is around 12/s, so the useful range sits either side of that. Asking
-// for 40/s only produced a 30s queue and told us nothing extra.
 const RATES = ratesEnv('1,2,4,6,8,12');
 const STAGE = intEnv('BENCH_STAGE', 30);
 
@@ -77,8 +75,6 @@ export function handleSummary(data) {
     dropped(data),
   ].join(',');
 
-  // stdout only: /scripts is mounted read-only, and writing a file there fails the
-  // run at the very end, after all the work is done.
   return { stdout: `${row}\n` };
 }
 

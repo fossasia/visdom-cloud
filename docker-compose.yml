@@ -2,13 +2,8 @@
 # environment (copy .env.docker.example to .env and edit that one file) — nothing
 # is hardcoded here, so swapping config is a single-file change.
 
-# Pinned rather than inherited from the directory name, which is what compose does by
-# default. Volumes are named after the project, so a checkout in a differently named
-# directory would otherwise come up against empty volumes and look like data loss.
 name: visdom-dev
 
-# Shared by every visdom instance; they differ only in name. The explicit image
-# tag means the build runs once and the rest are cache hits.
 x-visdom: &visdom
   build:
     context: ${VISDOM_CONTEXT}
@@ -55,11 +50,6 @@ services:
       db:
         condition: service_healthy
 
-  # One visdom process saturates one core, so capacity comes from running several
-  # and routing each workspace consistently to one of them (see deploy/
-  # nginx.conf.template). They share a volume safely because a workspace is only
-  # ever served by the instance its slug hashes to, so no two instances write the
-  # same files. Keep VISDOM_SERVERS in .env in step with the services here.
   visdom-1:
     <<: *visdom
   visdom-2:
@@ -85,8 +75,6 @@ services:
       - visdom-2
       - visdom-3
 
-  # Load generator for bench/. Profile-gated, so a plain `docker compose up` never
-  # starts it; see bench/README.md.
   bench:
     profiles: ["bench"]
     build:
@@ -101,8 +89,6 @@ services:
     depends_on:
       - proxy
 
-  # HTTP scenarios for the gateway paths visdom never touches. Same profile gate as
-  # bench, and on the same network so it reaches the proxy by service name.
   k6:
     profiles: ["bench"]
     image: grafana/k6:latest
@@ -110,8 +96,6 @@ services:
     working_dir: /scripts
     volumes:
       - ./bench/k6:/scripts:ro
-    # Passed through empty rather than defaulted, so each scenario's own defaults
-    # apply unless the caller overrides them.
     environment:
       BENCH_BASE: http://proxy:${NGINX_PORT}
       BENCH_USERS: ${BENCH_USERS:-}

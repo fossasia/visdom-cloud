@@ -63,8 +63,6 @@ function timedGet(label, path, headers) {
 export function setup() {
   settle();
 
-  // A key and a second member each, so the tabs return rows rather than empty lists.
-  // An empty table is the one case that never exercises serialization.
   const sessions = openSessions(registerUsers('browse', USERS));
   const guest = sessions[0];
 

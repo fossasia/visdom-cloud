@@ -1,6 +1,6 @@
-# Visdom Cloud
+# Visdom Dev
 
-Visdom Cloud is the multi-tenant control plane for [Visdom](https://github.com/fossasia/visdom), the FOSSASIA visualization tool for live, rich experiment data. It adds the pieces a hosted, team-based Visdom deployment needs but the open-source visdom server doesn't provide on its own: user accounts, workspaces, role-based team access, shareable invite links, scoped API keys, and billing — all sitting in front of the existing visdom UI.
+Visdom Dev is the multi-tenant control plane for [Visdom](https://github.com/fossasia/visdom), the FOSSASIA visualization tool for live, rich experiment data. It adds the pieces a hosted, team-based Visdom deployment needs but the open-source visdom server doesn't provide on its own: user accounts, workspaces, role-based team access, shareable invite links, scoped API keys, and billing — all sitting in front of the existing visdom UI.
 
 The project is split into two services:
 

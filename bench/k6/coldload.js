@@ -40,7 +40,6 @@ import {
 } from './lib.js';
 
 const USERS = intEnv('BENCH_USERS', 10);
-// 20/s left the gateway at 0.06 cores, so the useful range starts well above that.
 const RATES = ratesEnv('5,10,25,50,100');
 const STAGE = intEnv('BENCH_STAGE', 30);
 const WORKSPACE = __ENV.BENCH_WORKSPACE || 'k6-cold';
@@ -53,9 +52,6 @@ const assetsFetched = new Counter('assets_fetched');
 
 export const options = arrivalOptions('coldload', RATES, STAGE);
 
-// visdom links its optional user stylesheet as /vis/static/../user/style.css. A browser
-// resolves that before it ever hits the wire; sending the dots verbatim earns a 403
-// from Tornado's static handler and a phantom error in the results.
 function normalize(path) {
   const parts = [];
   path.split('/').forEach((segment) => {
@@ -71,9 +67,6 @@ function normalize(path) {
   return `/${parts.join('/')}`;
 }
 
-// Absolute same-origin paths only. visdom is told its base is /vis, so its assets sit
-// outside the /vis/w/<slug>/ prefix and are fetched as served. It also writes most of
-// its attribute values unquoted, so all three forms have to be accepted.
 function assetPaths(html) {
   const found = new Set();
   const pattern = /(?:src|href)=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
@@ -90,8 +83,6 @@ function assetPaths(html) {
 
 export function setup() {
   settle();
-  // A workspace each rather than one shared one: membership is per user, and it also
-  // spreads the load across shards the way real traffic does.
   const sessions = openSessions(registerUsers('cold', USERS)).map((session, i) => ({
     ...session,
     slug: ensureWorkspace(session, `${WORKSPACE}-${i}`),
@@ -114,9 +105,6 @@ export default function (data) {
   const session = data.sessions[Math.floor(Math.random() * data.sessions.length)];
   const headers = cookieFor(session);
 
-  // The verify the shorter cache window would force. Straight to the gateway, so the
-  // nginx auth cache cannot answer it and the number is the true per-check cost under
-  // whatever load the rest of the iteration is producing.
   const verify = http.get(`${BASE}/api/v1/auth/verify`, { headers, tags: { name: 'verify' } });
   verifyTime.add(verify.timings.duration);
 

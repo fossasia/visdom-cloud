@@ -16,7 +16,6 @@
 # which does not shard: every visdom instance calls it. If it saturates first, adding
 # visdom instances buys nothing, so this is measured separately rather than folded
 # into sweep.sh.
-#
 set -euo pipefail
 
 BENCH_TOOL=k6run
@@ -35,8 +34,6 @@ SMOKE=0
 
 cd "$BENCH_ROOT"
 
-# Each scenario declares its own CSV columns and the processes worth sampling, so
-# neither is repeated here and adding a scenario needs no change to this script.
 js_const() {
   sed -n "s/^export const $1 = *'\(.*\)';\$/\1/p" "$DRIVER" | tail -n 1
 }

@@ -29,21 +29,11 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
-# Shard key: the workspace a request belongs to. visdom keeps live state (envs +
-# socket subscribers) in memory per workspace, so every request touching a
-# workspace — writes, reads, and the websocket — must reach the same instance.
-# Sticky-by-session is NOT enough: one workspace has many sessions.
-#
-# Read off $request_uri rather than the $ws_slug capture below, so the key does
-# not depend on which location matched or on when captures are set relative to
-# upstream selection.
 map $request_uri $shard_key_path {
     default                       "";
     "~^/vis/w/(?<uri_slug>[^/]+)/" $uri_slug;
 }
 
-# Browser traffic carries the slug in the path; the python client sends it as a
-# header instead. Either way the same workspace yields the same key.
 map $shard_key_path $shard_key {
     default $shard_key_path;
     ""      $http_x_visdom_workspace;
@@ -53,15 +43,6 @@ upstream console_gateway {
     server ${GATEWAY_HOST}:${GATEWAY_PORT};
 }
 
-# One visdom process saturates one core at roughly 575 line writes/s while the rest
-# of the box sits idle (measured, see bench/README.md), so capacity comes from more
-# instances rather than a bigger box. `consistent` means adding or removing an instance migrates only ~1/N of
-# workspaces instead of reshuffling all of them.
-#
-# Requests with no workspace at all (SPA assets, /vis/ without a header) hash on
-# the empty key, which is deterministic — they all land on one instance. Harmless,
-# since those responses are identical everywhere, but it does make that instance
-# look busier than its peers.
 upstream visdom_server {
     hash $shard_key consistent;
     ${VISDOM_SERVERS}
@@ -114,12 +95,6 @@ server {
         proxy_set_header Cookie $http_cookie;
         proxy_set_header X-API-KEY $http_x_api_key;
 
-        # Keyed on the credential alone; the gate reads nothing else.
-        #
-        # This window is also how long a logged-out session or a revoked key keeps
-        # working, so it is kept as short as the gateway can afford. A verify costs
-        # 2.4 ms measured (bench/README.md, scenario 3) against a page load of 21 ms,
-        # so paying it six times more often than the previous 30 s does not register.
         proxy_cache auth_cache;
         proxy_cache_key "$cookie_session_token|$http_x_api_key";
         proxy_cache_valid 200 5s;
@@ -169,9 +144,6 @@ server {
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
 
-        # Which instance served this, so bench/shardcheck.py can prove a workspace
-        # pins to one shard. add_header at this level replaces the ones inherited
-        # from server{}, so the security headers have to be re-included here.
         add_header X-Visdom-Upstream $upstream_addr always;
         include /etc/nginx/security-headers.conf;
     }

@@ -1,8 +1,8 @@
-# Contributing to Visdom Cloud
+# Contributing to Visdom Dev
 
 We want to make contributing to this project as easy and transparent as possible.
 
-Visdom Cloud is the hosted control plane for [visdom](https://github.com/fossasia/visdom) — a FastAPI backend (`gateway/`) plus a React console (`frontend/`). Please keep in mind that, like visdom itself, this is a project maintained in contributors' spare time, so response times may vary.
+Visdom Dev is the hosted control plane for [visdom](https://github.com/fossasia/visdom) — a FastAPI backend (`gateway/`) plus a React console (`frontend/`). Please keep in mind that, like visdom itself, this is a project maintained in contributors' spare time, so response times may vary.
 
 ## Guidelines for Contributors
 
@@ -91,4 +91,4 @@ We use GitHub issues to track public bugs. Please ensure your description is cle
 
 ## License
 
-By contributing to Visdom Cloud, you agree that your contributions will be licensed under the same terms as the rest of this project.
+By contributing to Visdom Dev, you agree that your contributions will be licensed under the same terms as the rest of this project.

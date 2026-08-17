@@ -1,4 +1,4 @@
-# Visdom Cloud — Tester Quickstart
+# Visdom Dev — Tester Quickstart
 
 A hosted, multi-tenant visdom for live experiment visualization. Your training
 code runs on **your** machine and streams plots to a shared server; you view them

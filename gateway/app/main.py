@@ -12,13 +12,7 @@ from app.routers import api_keys, auth, billing, health, visdom, workspaces
 
 
 def _ensure_schema() -> None:
-    """Creates any missing tables, tolerating another worker getting there first.
-
-    Every worker runs this at import, so against an empty database several can clear
-    create_all's existence check together and then collide on the CREATE. The losers
-    see a duplicate-object error for work that has in fact just been done for them.
-    Retrying once settles it, and a second failure is a real one and still raises.
-    """
+    """Creates any missing tables, tolerating another worker getting there first."""
     try:
         Base.metadata.create_all(bind=engine)
     except SQLAlchemyError:
