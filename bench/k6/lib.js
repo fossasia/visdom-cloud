@@ -1,12 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
 
-// Shared setup for the k6 gateway scenarios.
-//
-// Every scenario needs the same three things before it can measure anything:
-// accounts that exist, sessions to carry, and a gateway that is not still draining
-// from the previous run. Keeping them here means a fix to any of the three lands in
-// every scenario at once.
-
 import http from 'k6/http';
 import { sleep } from 'k6';
 import { Counter } from 'k6/metrics';
@@ -15,6 +8,17 @@ export const BASE = __ENV.BENCH_BASE || 'http://proxy';
 export const PASSWORD = 'benchmark-password';
 
 export const SUMMARY_TREND_STATS = ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'];
+
+const RATE_LIMIT_RETRIES = 15;
+
+function sendUntilAdmitted(send) {
+  let res = send();
+  for (let i = 0; i < RATE_LIMIT_RETRIES && res.status === 429; i += 1) {
+    sleep(1);
+    res = send();
+  }
+  return res;
+}
 
 export function intEnv(name, fallback) {
   return parseInt(__ENV[name] || String(fallback), 10);
@@ -50,10 +54,12 @@ export function registerUsers(prefix, count) {
   const users = [];
   for (let i = 0; i < count; i += 1) {
     const address = email(prefix, i);
-    const res = http.post(
-      `${BASE}/api/v1/auth/register`,
-      JSON.stringify({ email: address, password: PASSWORD }),
-      { headers: { 'Content-Type': 'application/json' } }
+    const res = sendUntilAdmitted(() =>
+      http.post(
+        `${BASE}/api/v1/auth/register`,
+        JSON.stringify({ email: address, password: PASSWORD }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
     );
     if (res.status !== 201 && res.status !== 400) {
       throw new Error(`seeding ${address} failed: ${res.status} ${res.body}`);
@@ -65,10 +71,12 @@ export function registerUsers(prefix, count) {
 
 export function openSessions(users) {
   return users.map((address) => {
-    const res = http.post(`${BASE}/api/v1/auth/login`, {
-      username: address,
-      password: PASSWORD,
-    });
+    const res = sendUntilAdmitted(() =>
+      http.post(`${BASE}/api/v1/auth/login`, {
+        username: address,
+        password: PASSWORD,
+      })
+    );
     if (res.status !== 200) {
       throw new Error(`login ${address} failed: ${res.status} ${res.body}`);
     }
@@ -139,8 +147,13 @@ export function dropped(data) {
 }
 
 const failures = new Counter('workload_failures');
+const rateLimited = new Counter('rate_limited');
 
 export function recordFailure(res) {
+  if (res.status === 429) {
+    rateLimited.add(1);
+    return;
+  }
   if (res.status === 0 || res.status >= 400) {
     failures.add(1);
   }
@@ -148,4 +161,8 @@ export function recordFailure(res) {
 
 export function failed(data) {
   return data.metrics.workload_failures ? data.metrics.workload_failures.values.count : 0;
+}
+
+export function limited(data) {
+  return data.metrics.rate_limited ? data.metrics.rate_limited.values.count : 0;
 }
