@@ -46,7 +46,7 @@ cp .env.example .env
 python run.py
 ```
 
-The gateway starts on `http://localhost:8085` by default (configurable via `PORT` in `.env`). Database tables are created automatically on startup; Alembic is configured for future schema migrations as the project matures.
+The gateway starts on `http://localhost:8085` by default (configurable via `PORT` in `.env`). Apply the schema first with `alembic upgrade head`, and again after pulling changes that add a migration. The Docker image runs this on container start, so only local runs need it by hand.
 
 ### Frontend
 
