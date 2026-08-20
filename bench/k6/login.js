@@ -1,17 +1,5 @@
 /* Copyright 2017-present, The Visdom Authors */
 
-// Scenario 1 - login storm.
-//
-// Every login runs bcrypt at cost factor 12 (gensalt() default), which is a few
-// hundred milliseconds of CPU by design. That makes logins far more expensive than
-// anything measured so far, and the gateway is a single service that does not shard,
-// so this is a candidate for the real ceiling of the whole platform rather than of
-// visdom.
-//
-//   BENCH_USERS   accounts to seed and log in as (default 20)
-//   BENCH_RATES   comma-separated logins/sec stages (default 1,2,4,6,8,12)
-//   BENCH_STAGE   seconds per stage (default 30)
-
 import http from 'k6/http';
 import { check } from 'k6';
 import {
@@ -22,6 +10,7 @@ import {
   dropped,
   failed,
   intEnv,
+  limited,
   noRequests,
   ratesEnv,
   recordFailure,
@@ -31,7 +20,7 @@ import {
 } from './lib.js';
 
 const USERS = intEnv('BENCH_USERS', 20);
-const RATES = ratesEnv('1,2,4,6,8,12');
+const RATES = ratesEnv('1,5,10,20,40');
 const STAGE = intEnv('BENCH_STAGE', 30);
 
 export const options = arrivalOptions('login', RATES, STAGE);
@@ -49,7 +38,7 @@ export default function (data) {
     { tags: { name: 'login' } }
   );
   recordFailure(res);
-  check(res, { 'credentials accepted': (r) => r.status !== 401 && r.status !== 403 });
+  check(res, { 'served or shed': (r) => r.status === 200 || r.status === 429 });
 }
 
 export function handleSummary(data) {
@@ -72,6 +61,7 @@ export function handleSummary(data) {
     d['p(99)'].toFixed(1),
     d.max.toFixed(1),
     failed(data),
+    limited(data),
     dropped(data),
   ].join(',');
 
@@ -80,4 +70,4 @@ export function handleSummary(data) {
 
 export const WATCH = 'gateway=uvicorn db=postgres:';
 
-export const CSV_HEADER = 'ts,scenario,users,peak_rate,requests,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,dropped';
+export const CSV_HEADER = 'ts,scenario,users,peak_rate,requests,throughput,p50_ms,p95_ms,p99_ms,max_ms,errors,limited,dropped';
