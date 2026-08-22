@@ -1,25 +1,13 @@
 """
-Main FastAPI entrypoint. Auto-creates SQL tables, mounts routers, and configures CORS.
+Main FastAPI entrypoint. Mounts routers and configures CORS.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
-from app.database import Base, engine
 from app.routers import api_keys, auth, billing, health, visdom, workspaces
 
-
-def _ensure_schema() -> None:
-    """Creates any missing tables, tolerating another worker getting there first."""
-    try:
-        Base.metadata.create_all(bind=engine)
-    except SQLAlchemyError:
-        Base.metadata.create_all(bind=engine)
-
-
-_ensure_schema()
 app = FastAPI(
     title="Visdom Gateway",
     description="Microservice authentication sidecar for Visdom",
