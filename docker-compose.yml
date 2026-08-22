@@ -4,11 +4,18 @@
 
 name: visdom-dev
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-visdom: &visdom
   build:
     context: ${VISDOM_CONTEXT}
   image: visdom-dev-visdom:local
   restart: unless-stopped
+  logging: *logging
   environment:
     VISDOM_PORT: ${VISDOM_PORT}
     VISDOM_BASE_URL: ${VISDOM_BASE_URL}
@@ -23,6 +30,7 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -39,6 +47,7 @@ services:
     build:
       context: ./gateway
     restart: unless-stopped
+    logging: *logging
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
@@ -46,6 +55,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL}
       PORT: ${GATEWAY_PORT}
       GATEWAY_WORKERS: ${GATEWAY_WORKERS:-1}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-5}
     depends_on:
       db:
         condition: service_healthy
@@ -62,6 +73,7 @@ services:
       context: .
       dockerfile: deploy/proxy.Dockerfile
     restart: unless-stopped
+    logging: *logging
     environment:
       NGINX_PORT: ${NGINX_PORT}
       GATEWAY_HOST: gateway

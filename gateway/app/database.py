@@ -14,8 +14,18 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
 
-# PostgreSQL engine creation (no check_same_thread argument needed)
-engine = create_engine(settings.DATABASE_URL)
+
+def pool_options(url: str) -> dict:
+    """Returns the pool settings for a URL, empty for drivers without a queue pool."""
+    if url.startswith("sqlite"):
+        return {}
+    return {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+    }
+
+
+engine = create_engine(settings.DATABASE_URL, **pool_options(settings.DATABASE_URL))
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
